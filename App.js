@@ -16,21 +16,29 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 
-// Color scheme
+// Color scheme - Modern, mature, professional
 const colors = {
-  primary: '#6366F1',
-  secondary: '#EC4899',
+  primary: '#2E5090',
+  secondary: '#4A90E2',
+  accent: '#1ABC9C',
   background: '#FFFFFF',
-  lightBg: '#F8F9FA',
-  text: '#1F2937',
-  lightText: '#6B7280',
-  border: '#E5E7EB',
-  success: '#10B981',
+  lightBg: '#F5F7FA',
+  text: '#2C3E50',
+  lightText: '#7F8C8D',
+  border: '#D5DCEC',
+  success: '#27AE60',
+  warning: '#E67E22',
 };
 
-// Dropdown Component
+// Dropdown Component with Emojis
 function Dropdown({ label, value, options, onSelect }) {
   const [isOpen, setIsOpen] = useState(false);
+
+  const getDisplayValue = () => {
+    const selected = options.find(o => o.value === value);
+    if (!selected) return `Select ${label}`;
+    return `${selected.emoji} ${selected.label}`;
+  };
 
   return (
     <View style={styles.inputGroup}>
@@ -39,9 +47,7 @@ function Dropdown({ label, value, options, onSelect }) {
         style={[styles.dropdownButton, isOpen && styles.dropdownButtonActive]}
         onPress={() => setIsOpen(!isOpen)}
       >
-        <Text style={styles.dropdownButtonText}>
-          {value ? options.find(o => o.value === value)?.label || value : `Select ${label}`}
-        </Text>
+        <Text style={styles.dropdownButtonText}>{getDisplayValue()}</Text>
         <Text style={styles.dropdownIcon}>{isOpen ? '▲' : '▼'}</Text>
       </TouchableOpacity>
       {isOpen && (
@@ -55,6 +61,7 @@ function Dropdown({ label, value, options, onSelect }) {
                 setIsOpen(false);
               }}
             >
+              <Text style={styles.dropdownItemEmoji}>{option.emoji}</Text>
               <Text style={[
                 styles.dropdownItemText,
                 value === option.value && styles.dropdownItemTextActive
@@ -97,15 +104,20 @@ function RadioGroup({ label, value, options, onSelect }) {
   );
 }
 
-// Date Picker Component
-function DatePickerInput({ label, value, onSelect }) {
-  const [selectedDate, setSelectedDate] = useState(value ? new Date(value) : new Date());
+// Date Range Picker Component
+function DateRangePicker({ label, startDate, endDate, onSelect }) {
+  const [tempStartDate, setTempStartDate] = useState(startDate ? new Date(startDate) : new Date());
+  const [tempEndDate, setTempEndDate] = useState(endDate ? new Date(endDate) : new Date(new Date().getTime() + 7 * 24 * 60 * 60 * 1000));
+  const [selecting, setSelecting] = useState('start');
 
-  const handleDateChange = (day) => {
-    const newDate = new Date(selectedDate);
+  const handleDateChange = (day, isStart) => {
+    const newDate = new Date(isStart ? tempStartDate : tempEndDate);
     newDate.setDate(newDate.getDate() + day);
-    setSelectedDate(newDate);
-    onSelect(newDate.toISOString().split('T')[0]);
+    if (isStart) {
+      setTempStartDate(newDate);
+    } else {
+      setTempEndDate(newDate);
+    }
   };
 
   const formatDate = (date) => {
@@ -116,26 +128,72 @@ function DatePickerInput({ label, value, onSelect }) {
     });
   };
 
+  const handleConfirm = () => {
+    onSelect(tempStartDate.toISOString().split('T')[0], tempEndDate.toISOString().split('T')[0]);
+  };
+
+  const isSelectingStart = selecting === 'start';
+
   return (
     <View style={styles.inputGroup}>
       <Text style={styles.label}>{label}</Text>
-      <View style={styles.datePickerContainer}>
-        <TouchableOpacity
-          style={styles.dateNavButton}
-          onPress={() => handleDateChange(-1)}
-        >
-          <Text style={styles.dateNavText}>◀</Text>
-        </TouchableOpacity>
-        <View style={styles.dateDisplay}>
-          <Text style={styles.dateDisplayText}>{formatDate(selectedDate)}</Text>
+      <View style={styles.dateRangeContainer}>
+        {/* Start Date */}
+        <View style={styles.dateRangeSection}>
+          <Text style={styles.dateRangeLabel}>From</Text>
+          <View style={styles.datePickerContainer}>
+            <TouchableOpacity
+              style={styles.dateNavButton}
+              onPress={() => handleDateChange(-1, true)}
+            >
+              <Text style={styles.dateNavText}>◀</Text>
+            </TouchableOpacity>
+            <Pressable
+              style={[styles.dateDisplay, isSelectingStart && styles.dateDisplayActive]}
+              onPress={() => setSelecting('start')}
+            >
+              <Text style={styles.dateDisplayText}>{formatDate(tempStartDate)}</Text>
+            </Pressable>
+            <TouchableOpacity
+              style={styles.dateNavButton}
+              onPress={() => handleDateChange(1, true)}
+            >
+              <Text style={styles.dateNavText}>▶</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-        <TouchableOpacity
-          style={styles.dateNavButton}
-          onPress={() => handleDateChange(1)}
-        >
-          <Text style={styles.dateNavText}>▶</Text>
-        </TouchableOpacity>
+
+        {/* End Date */}
+        <View style={styles.dateRangeSection}>
+          <Text style={styles.dateRangeLabel}>To</Text>
+          <View style={styles.datePickerContainer}>
+            <TouchableOpacity
+              style={styles.dateNavButton}
+              onPress={() => handleDateChange(-1, false)}
+            >
+              <Text style={styles.dateNavText}>◀</Text>
+            </TouchableOpacity>
+            <Pressable
+              style={[styles.dateDisplay, !isSelectingStart && styles.dateDisplayActive]}
+              onPress={() => setSelecting('end')}
+            >
+              <Text style={styles.dateDisplayText}>{formatDate(tempEndDate)}</Text>
+            </Pressable>
+            <TouchableOpacity
+              style={styles.dateNavButton}
+              onPress={() => handleDateChange(1, false)}
+            >
+              <Text style={styles.dateNavText}>▶</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </View>
+      <TouchableOpacity
+        style={styles.dateConfirmButton}
+        onPress={handleConfirm}
+      >
+        <Text style={styles.dateConfirmText}>Confirm Dates</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -143,14 +201,14 @@ function DatePickerInput({ label, value, onSelect }) {
 // Object Creation - Page 1: Basic Information
 function ObjectCreationPage1({ onNext, objectData, setObjectData }) {
   const categoryOptions = [
-    { label: 'Tools', value: 'tools' },
-    { label: 'Sports', value: 'sports' },
-    { label: 'Kitchen', value: 'kitchen' },
-    { label: 'Garden', value: 'garden' },
-    { label: 'Electronics', value: 'electronics' },
-    { label: 'Books', value: 'books' },
-    { label: 'Games', value: 'games' },
-    { label: 'Clothing', value: 'clothing' },
+    { emoji: '🔧', label: 'Tools', value: 'tools' },
+    { emoji: '⚽', label: 'Sports', value: 'sports' },
+    { emoji: '🍳', label: 'Kitchen', value: 'kitchen' },
+    { emoji: '🌱', label: 'Garden', value: 'garden' },
+    { emoji: '💻', label: 'Electronics', value: 'electronics' },
+    { emoji: '📚', label: 'Books', value: 'books' },
+    { emoji: '🎮', label: 'Games', value: 'games' },
+    { emoji: '👕', label: 'Clothing', value: 'clothing' },
   ];
 
   const conditionOptions = [
@@ -173,8 +231,8 @@ function ObjectCreationPage1({ onNext, objectData, setObjectData }) {
       Alert.alert('Required', 'Please select the condition');
       return;
     }
-    if (!objectData.availability) {
-      Alert.alert('Required', 'Please select an availability date');
+    if (!objectData.startDate || !objectData.endDate) {
+      Alert.alert('Required', 'Please select availability dates');
       return;
     }
     if (!objectData.pricePerDay || objectData.pricePerDay <= 0) {
@@ -190,8 +248,14 @@ function ObjectCreationPage1({ onNext, objectData, setObjectData }) {
       
       {/* Header */}
       <View style={styles.pageHeader}>
-        <Text style={styles.pageTitle}>Add New Object</Text>
-        <Text style={styles.pageSubtitle}>Step 1 of 2: Basic Information</Text>
+        <TouchableOpacity style={styles.closeButton} onPress={() => {}}>
+          <Text style={styles.closeButtonText}>✕</Text>
+        </TouchableOpacity>
+        <View style={styles.headerContent}>
+          <Text style={styles.pageTitle}>New Object</Text>
+          <Text style={styles.pageSubtitle}>Step 1 of 2</Text>
+        </View>
+        <View style={styles.headerSpacer} />
       </View>
 
       <ScrollView
@@ -229,18 +293,19 @@ function ObjectCreationPage1({ onNext, objectData, setObjectData }) {
           onSelect={(condition) => setObjectData({...objectData, condition})}
         />
 
-        {/* Availability Date Picker */}
-        <DatePickerInput
-          label="Availability Date *"
-          value={objectData.availability}
-          onSelect={(availability) => setObjectData({...objectData, availability})}
+        {/* Availability Date Range Picker */}
+        <DateRangePicker
+          label="Availability Period *"
+          startDate={objectData.startDate}
+          endDate={objectData.endDate}
+          onSelect={(start, end) => setObjectData({...objectData, startDate: start, endDate: end})}
         />
 
         {/* Price Per Day */}
         <View style={styles.inputGroup}>
-          <Text style={styles.label}>Price per Day (€) *</Text>
+          <Text style={styles.label}>Price per Day (CAD$) *</Text>
           <View style={styles.priceInputContainer}>
-            <Text style={styles.priceSymbol}>€</Text>
+            <Text style={styles.priceSymbol}>CA$</Text>
             <TextInput
               style={styles.priceInput}
               placeholder="0.00"
@@ -260,9 +325,9 @@ function ObjectCreationPage1({ onNext, objectData, setObjectData }) {
         <TouchableOpacity
           style={styles.nextButton}
           onPress={handleNext}
-          activeOpacity={0.8}
+          activeOpacity={0.85}
         >
-          <Text style={styles.nextButtonText}>Next Step →</Text>
+          <Text style={styles.nextButtonText}>Continue →</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -330,8 +395,14 @@ function ObjectCreationPage2({ onBack, onSubmit, objectData, setObjectData }) {
       
       {/* Header */}
       <View style={styles.pageHeader}>
-        <Text style={styles.pageTitle}>Add New Object</Text>
-        <Text style={styles.pageSubtitle}>Step 2 of 2: Description & Image</Text>
+        <TouchableOpacity style={styles.closeButton} onPress={onBack}>
+          <Text style={styles.closeButtonText}>✕</Text>
+        </TouchableOpacity>
+        <View style={styles.headerContent}>
+          <Text style={styles.pageTitle}>New Object</Text>
+          <Text style={styles.pageSubtitle}>Step 2 of 2</Text>
+        </View>
+        <View style={styles.headerSpacer} />
       </View>
 
       <ScrollView
@@ -409,42 +480,108 @@ function ObjectCreationPage2({ onBack, onSubmit, objectData, setObjectData }) {
         <TouchableOpacity
           style={styles.backButton}
           onPress={onBack}
-          activeOpacity={0.8}
+          activeOpacity={0.85}
         >
           <Text style={styles.backButtonText}>← Back</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.submitButton}
           onPress={handleSubmit}
-          activeOpacity={0.8}
+          activeOpacity={0.85}
         >
-          <Text style={styles.submitButtonText}>Post Object ✓</Text>
+          <Text style={styles.submitButtonText}>Post ✓</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
 }
 
+// Category Page Component
+function CategoryPage({ categoryValue, onBack, objects }) {
+  const categoryOptions = [
+    { emoji: '🔧', label: 'Tools', value: 'tools' },
+    { emoji: '⚽', label: 'Sports', value: 'sports' },
+    { emoji: '🍳', label: 'Kitchen', value: 'kitchen' },
+    { emoji: '🌱', label: 'Garden', value: 'garden' },
+    { emoji: '💻', label: 'Electronics', value: 'electronics' },
+    { emoji: '📚', label: 'Books', value: 'books' },
+    { emoji: '🎮', label: 'Games', value: 'games' },
+    { emoji: '👕', label: 'Clothing', value: 'clothing' },
+  ];
+
+  const category = categoryOptions.find(c => c.value === categoryValue);
+  const filteredObjects = objects.filter(obj => obj.category === categoryValue);
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+      
+      {/* Header */}
+      <View style={styles.categoryHeader}>
+        <TouchableOpacity onPress={onBack} style={styles.backHeaderButton}>
+          <Text style={styles.backHeaderButtonText}>← Back</Text>
+        </TouchableOpacity>
+        <View style={styles.categoryHeaderContent}>
+          <Text style={styles.categoryHeaderEmoji}>{category?.emoji}</Text>
+          <View>
+            <Text style={styles.categoryHeaderTitle}>{category?.label}</Text>
+            <Text style={styles.categoryHeaderCount}>{filteredObjects.length} items</Text>
+          </View>
+        </View>
+        <View style={styles.headerSpacer} />
+      </View>
+
+      {filteredObjects.length > 0 ? (
+        <FlatList
+          data={filteredObjects}
+          renderItem={({ item }) => (
+            <View style={styles.objectCard}>
+              <Image
+                source={{ uri: item.image }}
+                style={styles.objectCardImage}
+              />
+              <View style={styles.objectCardContent}>
+                <Text style={styles.objectCardName}>{item.name}</Text>
+                <Text style={styles.objectCardCondition}>Condition: {item.condition}</Text>
+                <View style={styles.objectCardFooter}>
+                  <Text style={styles.objectCardPrice}>CA${parseFloat(item.pricePerDay).toFixed(2)}/day</Text>
+                </View>
+              </View>
+            </View>
+          )}
+          keyExtractor={(item) => item.id}
+          scrollEnabled={true}
+          contentContainerStyle={styles.listContent}
+        />
+      ) : (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyStateEmoji}>📭</Text>
+          <Text style={styles.emptyStateTitle}>No items in this category</Text>
+          <Text style={styles.emptyStateText}>Check back later or try another category</Text>
+        </View>
+      )}
+    </SafeAreaView>
+  );
+}
+
 // Home Page Component
-function HomePage({ onCreateObject }) {
+function HomePage({ onCreateObject, onCategorySelect, objects }) {
   const [searchQuery, setSearchQuery] = useState('');
 
-  const categories = [
-    { id: 1, name: 'Tools', icon: '🔧' },
-    { id: 2, name: 'Sports', icon: '⚽' },
-    { id: 3, name: 'Kitchen', icon: '🍳' },
-    { id: 4, name: 'Garden', icon: '🌱' },
-    { id: 5, name: 'Electronics', icon: '💻' },
-    { id: 6, name: 'Books', icon: '📚' },
-    { id: 7, name: 'Games', icon: '🎮' },
+  const categoryOptions = [
+    { emoji: '🔧', label: 'Tools', value: 'tools' },
+    { emoji: '⚽', label: 'Sports', value: 'sports' },
+    { emoji: '🍳', label: 'Kitchen', value: 'kitchen' },
+    { emoji: '🌱', label: 'Garden', value: 'garden' },
+    { emoji: '💻', label: 'Electronics', value: 'electronics' },
+    { emoji: '📚', label: 'Books', value: 'books' },
+    { emoji: '🎮', label: 'Games', value: 'games' },
+    { emoji: '👕', label: 'Clothing', value: 'clothing' },
   ];
 
-  const nearbyItems = [
-    { id: 1, name: 'Power Drill', owner: 'Sarah M.', distance: '0.3 km', available: true },
-    { id: 2, name: 'Ladder', owner: 'John D.', distance: '0.5 km', available: true },
-    { id: 3, name: 'Tent (4-person)', owner: 'Mike R.', distance: '0.8 km', available: false },
-    { id: 4, name: 'Projector', owner: 'Emma L.', distance: '1.2 km', available: true },
-  ];
+  const filteredObjects = objects.filter(obj =>
+    obj.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
     <>
@@ -459,10 +596,10 @@ function HomePage({ onCreateObject }) {
           <Text style={styles.searchIcon}>🔍</Text>
           <TextInput
             style={styles.searchInput}
-            placeholder="What do you need to borrow?"
+            placeholder="Search items..."
             value={searchQuery}
             onChangeText={setSearchQuery}
-            placeholderTextColor="#999"
+            placeholderTextColor={colors.lightText}
           />
         </View>
 
@@ -470,62 +607,62 @@ function HomePage({ onCreateObject }) {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Browse Categories</Text>
           <View style={styles.categoriesGrid}>
-            {categories.map((category) => (
+            {categoryOptions.map((category) => (
               <TouchableOpacity
-                key={category.id}
+                key={category.value}
                 style={styles.categoryCard}
-                onPress={() => console.log('Category pressed:', category.name)}
+                onPress={() => onCategorySelect(category.value)}
               >
-                <Text style={styles.categoryIcon}>{category.icon}</Text>
-                <Text style={styles.categoryName}>{category.name}</Text>
+                <Text style={styles.categoryCardEmoji}>{category.emoji}</Text>
+                <Text style={styles.categoryCardName}>{category.label}</Text>
               </TouchableOpacity>
             ))}
           </View>
         </View>
 
-        {/* Nearby Items Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Available Nearby</Text>
-          {nearbyItems.map((item) => (
-            <TouchableOpacity
-              key={item.id}
-              style={styles.itemCard}
-              onPress={() => console.log('Item pressed:', item.name)}
-            >
-              <View style={styles.itemImagePlaceholder}>
-                <Text style={styles.itemImageIcon}>📦</Text>
-              </View>
-              <View style={styles.itemInfo}>
-                <Text style={styles.itemName}>{item.name}</Text>
-                <Text style={styles.itemOwner}>👤 {item.owner}</Text>
-                <Text style={styles.itemDistance}>📍 {item.distance} away</Text>
-              </View>
-              <View style={styles.itemStatus}>
-                <View
-                  style={[
-                    styles.statusBadge,
-                    item.available ? styles.availableBadge : styles.unavailableBadge,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.statusText,
-                      item.available ? styles.availableText : styles.unavailableText,
-                    ]}
-                  >
-                    {item.available ? 'Available' : 'In Use'}
-                  </Text>
+        {/* Available Items Section */}
+        {filteredObjects.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Available Items ({filteredObjects.length})</Text>
+            <View style={styles.objectsGridContainer}>
+              {filteredObjects.map((item) => (
+                <View key={item.id} style={styles.objectGridItem}>
+                  <View style={styles.objectCard}>
+                    <Image
+                      source={{ uri: item.image }}
+                      style={styles.objectCardImage}
+                    />
+                    <View style={styles.objectCardContent}>
+                      <Text style={styles.objectCardName} numberOfLines={1}>{item.name}</Text>
+                      <Text style={styles.objectCardPrice}>CA${parseFloat(item.pricePerDay).toFixed(2)}/day</Text>
+                    </View>
+                  </View>
                 </View>
-              </View>
-            </TouchableOpacity>
-          ))}
-        </View>
+              ))}
+            </View>
+          </View>
+        )}
 
-        {/* Bottom spacing */}
+        {searchQuery && filteredObjects.length === 0 && (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateEmoji}>🔍</Text>
+            <Text style={styles.emptyStateTitle}>No items found</Text>
+            <Text style={styles.emptyStateText}>Try a different search term</Text>
+          </View>
+        )}
+
+        {objects.length === 0 && !searchQuery && (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateEmoji}>🎉</Text>
+            <Text style={styles.emptyStateTitle}>No items yet</Text>
+            <Text style={styles.emptyStateText}>Be the first to share an item!</Text>
+          </View>
+        )}
+
         <View style={styles.bottomSpacing} />
       </ScrollView>
 
-      {/* Bottom Navigation with Create Button */}
+      {/* Bottom Navigation */}
       <View style={styles.bottomNav}>
         <TouchableOpacity style={styles.navItem}>
           <Text style={styles.navIconActive}>🏠</Text>
@@ -540,7 +677,7 @@ function HomePage({ onCreateObject }) {
           onPress={onCreateObject}
         >
           <Text style={styles.navIcon}>➕</Text>
-          <Text style={styles.navText}>Add Item</Text>
+          <Text style={styles.navText}>Add</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.navItem}>
           <Text style={styles.navIcon}>💬</Text>
@@ -558,11 +695,14 @@ function HomePage({ onCreateObject }) {
 // Main App Component
 export default function App() {
   const [currentPage, setCurrentPage] = useState('home');
+  const [selectedCategory, setSelectedCategory] = useState(null);
+  const [objects, setObjects] = useState([]);
   const [objectData, setObjectData] = useState({
     name: '',
     category: '',
     condition: '',
-    availability: new Date().toISOString().split('T')[0],
+    startDate: new Date().toISOString().split('T')[0],
+    endDate: new Date(new Date().getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     pricePerDay: '',
     description: '',
     image: null,
@@ -580,15 +720,31 @@ export default function App() {
     setCurrentPage('creation1');
   };
 
+  const handleCategorySelect = (categoryValue) => {
+    setSelectedCategory(categoryValue);
+    setCurrentPage('category');
+  };
+
+  const handleBackToHome = () => {
+    setCurrentPage('home');
+    setSelectedCategory(null);
+  };
+
   const handleSubmit = () => {
-    console.log('Object submitted:', objectData);
+    const newObject = {
+      id: Math.random().toString(36).substr(2, 9),
+      ...objectData,
+    };
+    setObjects([...objects, newObject]);
     Alert.alert('Success', 'Your object has been posted!');
+    
     // Reset data
     setObjectData({
       name: '',
       category: '',
       condition: '',
-      availability: new Date().toISOString().split('T')[0],
+      startDate: new Date().toISOString().split('T')[0],
+      endDate: new Date(new Date().getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       pricePerDay: '',
       description: '',
       image: null,
@@ -599,7 +755,18 @@ export default function App() {
   return (
     <>
       {currentPage === 'home' && (
-        <HomePage onCreateObject={handleCreateObject} />
+        <HomePage 
+          onCreateObject={handleCreateObject}
+          onCategorySelect={handleCategorySelect}
+          objects={objects}
+        />
+      )}
+      {currentPage === 'category' && (
+        <CategoryPage
+          categoryValue={selectedCategory}
+          onBack={handleBackToHome}
+          objects={objects}
+        />
       )}
       {currentPage === 'creation1' && (
         <ObjectCreationPage1
@@ -631,44 +798,121 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: 20,
   },
+  listContent: {
+    paddingBottom: 20,
+  },
 
   // Header Styles
   header: {
     backgroundColor: colors.primary,
     paddingTop: 20,
-    paddingBottom: 20,
+    paddingBottom: 24,
     paddingHorizontal: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
   },
   headerTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#fff',
+    fontSize: 32,
+    fontWeight: '800',
+    color: '#FFFFFF',
   },
   headerSubtitle: {
     fontSize: 14,
-    color: '#fff',
+    color: 'rgba(255, 255, 255, 0.85)',
     marginTop: 4,
-    opacity: 0.9,
+    fontWeight: '500',
   },
 
   // Page Header (for creation pages)
   pageHeader: {
     backgroundColor: colors.primary,
-    paddingTop: 20,
-    paddingBottom: 20,
-    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 16,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  closeButton: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  closeButtonText: {
+    fontSize: 24,
+    color: '#FFFFFF',
+  },
+  headerContent: {
+    flex: 1,
+    marginLeft: 12,
   },
   pageTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#fff',
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   pageSubtitle: {
-    fontSize: 14,
-    color: '#fff',
-    marginTop: 4,
-    opacity: 0.9,
+    fontSize: 13,
+    color: 'rgba(255, 255, 255, 0.85)',
+    marginTop: 2,
   },
+  headerSpacer: {
+    width: 40,
+  },
+
+  // Category Header
+  categoryHeader: {
+    backgroundColor: colors.primary,
+    paddingTop: 16,
+    paddingBottom: 16,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  backHeaderButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+  },
+  backHeaderButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  categoryHeaderContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 12,
+  },
+  categoryHeaderEmoji: {
+    fontSize: 28,
+    marginRight: 12,
+  },
+  categoryHeaderTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  categoryHeaderCount: {
+    fontSize: 13,
+    color: 'rgba(255, 255, 255, 0.8)',
+    marginTop: 2,
+  },
+
+  // Page Content
   pageContent: {
     flex: 1,
   },
@@ -679,16 +923,16 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   label: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     color: colors.text,
     marginBottom: 8,
   },
   textInput: {
     backgroundColor: colors.lightBg,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: colors.border,
-    borderRadius: 12,
+    borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 16,
@@ -696,9 +940,9 @@ const styles = StyleSheet.create({
   },
   textAreaInput: {
     backgroundColor: colors.lightBg,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: colors.border,
-    borderRadius: 12,
+    borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 16,
@@ -708,16 +952,16 @@ const styles = StyleSheet.create({
   charCount: {
     fontSize: 12,
     color: colors.lightText,
-    marginTop: 4,
+    marginTop: 6,
     textAlign: 'right',
   },
 
   // Dropdown Styles
   dropdownButton: {
     backgroundColor: colors.lightBg,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: colors.border,
-    borderRadius: 12,
+    borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 12,
     flexDirection: 'row',
@@ -726,6 +970,7 @@ const styles = StyleSheet.create({
   },
   dropdownButtonActive: {
     borderColor: colors.primary,
+    backgroundColor: 'rgba(46, 80, 144, 0.05)',
   },
   dropdownButtonText: {
     fontSize: 16,
@@ -738,9 +983,9 @@ const styles = StyleSheet.create({
   },
   dropdownMenu: {
     backgroundColor: colors.background,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: colors.border,
-    borderRadius: 12,
+    borderRadius: 10,
     marginTop: 4,
     maxHeight: 200,
     zIndex: 10,
@@ -750,10 +995,17 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  dropdownItemEmoji: {
+    fontSize: 18,
+    marginRight: 10,
   },
   dropdownItemText: {
     fontSize: 16,
     color: colors.text,
+    flex: 1,
   },
   dropdownItemTextActive: {
     color: colors.primary,
@@ -795,41 +1047,68 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
 
-  // Date Picker Styles
+  // Date Range Picker Styles
+  dateRangeContainer: {
+    gap: 14,
+  },
+  dateRangeSection: {
+    gap: 8,
+  },
+  dateRangeLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.lightText,
+  },
   datePickerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 8,
   },
   dateNavButton: {
     backgroundColor: colors.lightBg,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: colors.border,
     borderRadius: 8,
-    width: 40,
-    height: 40,
+    width: 36,
+    height: 36,
     justifyContent: 'center',
     alignItems: 'center',
   },
   dateNavText: {
-    fontSize: 18,
+    fontSize: 16,
     color: colors.primary,
     fontWeight: 'bold',
   },
   dateDisplay: {
     flex: 1,
     backgroundColor: colors.lightBg,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: colors.border,
-    borderRadius: 12,
+    borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 12,
     justifyContent: 'center',
+  },
+  dateDisplayActive: {
+    borderColor: colors.primary,
+    backgroundColor: 'rgba(46, 80, 144, 0.05)',
   },
   dateDisplayText: {
     fontSize: 16,
     color: colors.text,
     fontWeight: '500',
+  },
+  dateConfirmButton: {
+    backgroundColor: colors.secondary,
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  dateConfirmText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
 
   // Price Input Styles
@@ -837,13 +1116,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.lightBg,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: colors.border,
-    borderRadius: 12,
+    borderRadius: 10,
     paddingHorizontal: 14,
   },
   priceSymbol: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
     color: colors.primary,
     marginRight: 8,
@@ -860,7 +1139,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.lightBg,
     borderWidth: 2,
     borderColor: colors.border,
-    borderRadius: 12,
+    borderStyle: 'dashed',
+    borderRadius: 10,
     paddingVertical: 40,
     justifyContent: 'center',
     alignItems: 'center',
@@ -876,20 +1156,20 @@ const styles = StyleSheet.create({
   },
   imagePreviewContainer: {
     position: 'relative',
-    borderRadius: 12,
+    borderRadius: 10,
     overflow: 'hidden',
     marginBottom: 12,
   },
   imagePreview: {
     width: '100%',
     height: 240,
-    borderRadius: 12,
+    borderRadius: 10,
   },
   imageRemoveButton: {
     position: 'absolute',
     top: 10,
     right: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
     borderRadius: 20,
     width: 36,
     height: 36,
@@ -916,12 +1196,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 12,
-    borderRadius: 12,
+    borderRadius: 10,
     gap: 8,
   },
   imageButtonSecondary: {
     backgroundColor: colors.lightBg,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: colors.border,
   },
   imageButtonIcon: {
@@ -946,15 +1226,15 @@ const styles = StyleSheet.create({
   nextButton: {
     flex: 1,
     backgroundColor: colors.primary,
-    borderRadius: 12,
+    borderRadius: 10,
     paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 4,
   },
   nextButtonText: {
     fontSize: 16,
@@ -962,32 +1242,32 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   backButton: {
-    flex: 0.4,
+    flex: 0.35,
     backgroundColor: colors.lightBg,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: colors.border,
-    borderRadius: 12,
+    borderRadius: 10,
     paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
   backButtonText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     color: colors.text,
   },
   submitButton: {
-    flex: 0.6,
+    flex: 0.65,
     backgroundColor: colors.success,
-    borderRadius: 12,
+    borderRadius: 10,
     paddingVertical: 14,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: colors.success,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 4,
   },
   submitButtonText: {
     fontSize: 16,
@@ -1000,35 +1280,37 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#fff',
-    margin: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 120,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    marginHorizontal: 16,
+    marginTop: 16,
+    marginBottom: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: colors.border,
   },
   searchIcon: {
-    fontSize: 20,
-    marginRight: 8,
+    fontSize: 18,
+    marginRight: 10,
   },
   searchInput: {
     flex: 1,
     fontSize: 16,
-    color: '#333',
+    color: colors.text,
   },
+
   section: {
     marginBottom: 24,
   },
   sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.text,
     marginLeft: 16,
     marginBottom: 12,
   },
+
+  // Category Styles
   categoriesGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1036,126 +1318,127 @@ const styles = StyleSheet.create({
   },
   categoryCard: {
     width: '31%',
-    backgroundColor: '#fff',
+    backgroundColor: colors.background,
     margin: '1%',
     padding: 16,
-    borderRadius: 12,
+    borderRadius: 10,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 2,
+    borderWidth: 1.5,
+    borderColor: colors.border,
   },
-  categoryIcon: {
+  categoryCardEmoji: {
     fontSize: 32,
     marginBottom: 8,
   },
-  categoryName: {
+  categoryCardName: {
     fontSize: 12,
-    color: '#333',
+    color: colors.text,
     fontWeight: '600',
     textAlign: 'center',
   },
-  itemCard: {
+
+  // Object Grid Styles
+  objectsGridContainer: {
     flexDirection: 'row',
-    backgroundColor: '#fff',
-    marginHorizontal: 16,
-    marginBottom: 12,
+    flexWrap: 'wrap',
+    paddingHorizontal: 8,
+  },
+  objectGridItem: {
+    width: '48%',
+    margin: '1%',
+  },
+  objectCard: {
+    backgroundColor: colors.background,
+    borderRadius: 10,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  objectCardImage: {
+    width: '100%',
+    height: 140,
+    backgroundColor: colors.lightBg,
+  },
+  objectCardContent: {
     padding: 12,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 2,
   },
-  itemImagePlaceholder: {
-    width: 70,
-    height: 70,
-    backgroundColor: '#E8F4F8',
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  itemImageIcon: {
-    fontSize: 32,
-  },
-  itemInfo: {
-    flex: 1,
-    marginLeft: 12,
-    justifyContent: 'center',
-  },
-  itemName: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
+  objectCardName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.text,
     marginBottom: 4,
   },
-  itemOwner: {
-    fontSize: 13,
-    color: '#666',
-    marginBottom: 2,
+  objectCardCondition: {
+    fontSize: 12,
+    color: colors.lightText,
+    marginBottom: 8,
   },
-  itemDistance: {
-    fontSize: 13,
-    color: '#666',
+  objectCardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
-  itemStatus: {
+  objectCardPrice: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+
+  // Empty State
+  emptyState: {
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'flex-end',
+    paddingVertical: 60,
+    paddingHorizontal: 30,
   },
-  statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 12,
+  emptyStateEmoji: {
+    fontSize: 64,
+    marginBottom: 16,
   },
-  availableBadge: {
-    backgroundColor: '#E8F5E9',
+  emptyStateTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: 8,
+    textAlign: 'center',
   },
-  unavailableBadge: {
-    backgroundColor: '#FFEBEE',
+  emptyStateText: {
+    fontSize: 14,
+    color: colors.lightText,
+    textAlign: 'center',
   },
-  statusText: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  availableText: {
-    color: '#2E7D32',
-  },
-  unavailableText: {
-    color: '#C62828',
-  },
+
+  // Navigation Styles
   bottomSpacing: {
     height: 20,
   },
   bottomNav: {
     flexDirection: 'row',
-    backgroundColor: '#fff',
-    paddingVertical: 8,
+    backgroundColor: colors.background,
+    paddingVertical: 10,
     borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
+    borderTopColor: colors.border,
   },
   navItem: {
     flex: 1,
     alignItems: 'center',
-    paddingVertical: 4,
+    paddingVertical: 8,
   },
   navIcon: {
     fontSize: 24,
-    marginBottom: 2,
-    opacity: 0.6,
+    marginBottom: 4,
+    opacity: 0.5,
   },
   navIconActive: {
     fontSize: 24,
-    marginBottom: 2,
+    marginBottom: 4,
   },
   navText: {
-    fontSize: 10,
-    color: '#999',
+    fontSize: 11,
+    color: colors.lightText,
   },
   navTextActive: {
-    fontSize: 10,
+    fontSize: 11,
     color: colors.primary,
     fontWeight: '600',
   },
