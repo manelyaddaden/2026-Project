@@ -30,48 +30,31 @@ const colors = {
   warning: '#E67E22',
 };
 
-// Dropdown Component with Emojis
-function Dropdown({ label, value, options, onSelect }) {
-  const [isOpen, setIsOpen] = useState(false);
-
-  const getDisplayValue = () => {
-    const selected = options.find(o => o.value === value);
-    if (!selected) return `Select ${label}`;
-    return `${selected.emoji} ${selected.label}`;
-  };
-
+// Category Grid Component - Horizontal 2-line layout
+function CategoryGrid({ label, value, options, onSelect }) {
   return (
     <View style={styles.inputGroup}>
       <Text style={styles.label}>{label}</Text>
-      <TouchableOpacity
-        style={[styles.dropdownButton, isOpen && styles.dropdownButtonActive]}
-        onPress={() => setIsOpen(!isOpen)}
-      >
-        <Text style={styles.dropdownButtonText}>{getDisplayValue()}</Text>
-        <Text style={styles.dropdownIcon}>{isOpen ? '▲' : '▼'}</Text>
-      </TouchableOpacity>
-      {isOpen && (
-        <View style={styles.dropdownMenu}>
-          {options.map((option) => (
-            <TouchableOpacity
-              key={option.value}
-              style={styles.dropdownItem}
-              onPress={() => {
-                onSelect(option.value);
-                setIsOpen(false);
-              }}
-            >
-              <Text style={styles.dropdownItemEmoji}>{option.emoji}</Text>
-              <Text style={[
-                styles.dropdownItemText,
-                value === option.value && styles.dropdownItemTextActive
-              ]}>
-                {option.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      )}
+      <View style={styles.categoryGridContainer}>
+        {options.map((option) => (
+          <TouchableOpacity
+            key={option.value}
+            style={[
+              styles.categoryGridItem,
+              value === option.value && styles.categoryGridItemSelected
+            ]}
+            onPress={() => onSelect(option.value)}
+          >
+            <Text style={styles.categoryGridEmoji}>{option.emoji}</Text>
+            <Text style={[
+              styles.categoryGridLabel,
+              value === option.value && styles.categoryGridLabelSelected
+            ]}>
+              {option.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
     </View>
   );
 }
@@ -105,7 +88,7 @@ function RadioGroup({ label, value, options, onSelect }) {
 }
 
 // Date Range Picker Component
-function DateRangePicker({ label, startDate, endDate, onSelect }) {
+function DateRangePicker({ label, startDate, endDate, onSelect, showConfirmButton = true }) {
   const [tempStartDate, setTempStartDate] = useState(startDate ? new Date(startDate) : new Date());
   const [tempEndDate, setTempEndDate] = useState(endDate ? new Date(endDate) : new Date(new Date().getTime() + 7 * 24 * 60 * 60 * 1000));
   const [selecting, setSelecting] = useState('start');
@@ -188,18 +171,20 @@ function DateRangePicker({ label, startDate, endDate, onSelect }) {
           </View>
         </View>
       </View>
-      <TouchableOpacity
-        style={styles.dateConfirmButton}
-        onPress={handleConfirm}
-      >
-        <Text style={styles.dateConfirmText}>Confirm Dates</Text>
-      </TouchableOpacity>
+      {showConfirmButton && (
+        <TouchableOpacity
+          style={styles.dateConfirmButton}
+          onPress={handleConfirm}
+        >
+          <Text style={styles.dateConfirmText}>Confirm Dates</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
 
 // Object Creation - Page 1: Basic Information
-function ObjectCreationPage1({ onNext, objectData, setObjectData }) {
+function ObjectCreationPage1({ onNext, objectData, setObjectData, onNavigate, currentPage }) {
   const categoryOptions = [
     { emoji: '🔧', label: 'Tools', value: 'tools' },
     { emoji: '⚽', label: 'Sports', value: 'sports' },
@@ -243,14 +228,18 @@ function ObjectCreationPage1({ onNext, objectData, setObjectData }) {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+    <View style={styles.homeContainer}>
+      <LeftSidebar currentPage={currentPage} onNavigate={onNavigate} />
       
-      {/* Header */}
-      <View style={styles.pageHeader}>
-        <TouchableOpacity style={styles.closeButton} onPress={() => {}}>
-          <Text style={styles.closeButtonText}>✕</Text>
-        </TouchableOpacity>
+      <View style={styles.homeContent}>
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+        
+        {/* Header */}
+        <View style={styles.pageHeader}>
+          <TouchableOpacity style={styles.closeButton} onPress={() => {}}>
+            <Text style={styles.closeButtonText}>✕</Text>
+          </TouchableOpacity>
         <View style={styles.headerContent}>
           <Text style={styles.pageTitle}>New Object</Text>
           <Text style={styles.pageSubtitle}>Step 1 of 2</Text>
@@ -277,8 +266,8 @@ function ObjectCreationPage1({ onNext, objectData, setObjectData }) {
           <Text style={styles.charCount}>{objectData.name.length}/50</Text>
         </View>
 
-        {/* Category Dropdown */}
-        <Dropdown
+        {/* Category Grid */}
+        <CategoryGrid
           label="Category *"
           value={objectData.category}
           options={categoryOptions}
@@ -299,6 +288,7 @@ function ObjectCreationPage1({ onNext, objectData, setObjectData }) {
           startDate={objectData.startDate}
           endDate={objectData.endDate}
           onSelect={(start, end) => setObjectData({...objectData, startDate: start, endDate: end})}
+          showConfirmButton={false}
         />
 
         {/* Price Per Day */}
@@ -310,9 +300,16 @@ function ObjectCreationPage1({ onNext, objectData, setObjectData }) {
               style={styles.priceInput}
               placeholder="0.00"
               placeholderTextColor={colors.lightText}
-              keyboardType="decimal-pad"
+              keyboardType="number-pad"
               value={objectData.pricePerDay}
-              onChangeText={(text) => setObjectData({...objectData, pricePerDay: text})}
+              onChangeText={(text) => {
+                // Only allow numbers and decimal point
+                const filtered = text.replace(/[^0-9.]/g, '');
+                // Prevent multiple decimal points
+                const parts = filtered.split('.');
+                const finalText = parts.length > 2 ? parts[0] + '.' + parts.slice(1).join('') : filtered;
+                setObjectData({...objectData, pricePerDay: finalText});
+              }}
             />
           </View>
         </View>
@@ -330,12 +327,14 @@ function ObjectCreationPage1({ onNext, objectData, setObjectData }) {
           <Text style={styles.nextButtonText}>Continue →</Text>
         </TouchableOpacity>
       </View>
-    </SafeAreaView>
+      </SafeAreaView>
+      </View>
+    </View>
   );
 }
 
 // Object Creation - Page 2: Description and Image
-function ObjectCreationPage2({ onBack, onSubmit, objectData, setObjectData }) {
+function ObjectCreationPage2({ onBack, onSubmit, objectData, setObjectData, onNavigate, currentPage }) {
   const [imageUri, setImageUri] = useState(objectData.image);
 
   const pickImage = async () => {
@@ -390,14 +389,18 @@ function ObjectCreationPage2({ onBack, onSubmit, objectData, setObjectData }) {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+    <View style={styles.homeContainer}>
+      <LeftSidebar currentPage={currentPage} onNavigate={onNavigate} />
       
-      {/* Header */}
-      <View style={styles.pageHeader}>
-        <TouchableOpacity style={styles.closeButton} onPress={onBack}>
-          <Text style={styles.closeButtonText}>✕</Text>
-        </TouchableOpacity>
+      <View style={styles.homeContent}>
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+        
+        {/* Header */}
+        <View style={styles.pageHeader}>
+          <TouchableOpacity style={styles.closeButton} onPress={onBack}>
+            <Text style={styles.closeButtonText}>✕</Text>
+          </TouchableOpacity>
         <View style={styles.headerContent}>
           <Text style={styles.pageTitle}>New Object</Text>
           <Text style={styles.pageSubtitle}>Step 2 of 2</Text>
@@ -492,12 +495,14 @@ function ObjectCreationPage2({ onBack, onSubmit, objectData, setObjectData }) {
           <Text style={styles.submitButtonText}>Post ✓</Text>
         </TouchableOpacity>
       </View>
-    </SafeAreaView>
+      </SafeAreaView>
+      </View>
+    </View>
   );
 }
 
 // Category Page Component
-function CategoryPage({ categoryValue, onBack, objects }) {
+function CategoryPage({ categoryValue, onBack, objects, onNavigate, currentPage }) {
   const categoryOptions = [
     { emoji: '🔧', label: 'Tools', value: 'tools' },
     { emoji: '⚽', label: 'Sports', value: 'sports' },
@@ -513,11 +518,15 @@ function CategoryPage({ categoryValue, onBack, objects }) {
   const filteredObjects = objects.filter(obj => obj.category === categoryValue);
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+    <View style={styles.homeContainer}>
+      <LeftSidebar currentPage={currentPage} onNavigate={onNavigate} />
       
-      {/* Header */}
-      <View style={styles.categoryHeader}>
+      <View style={styles.homeContent}>
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+        
+        {/* Header */}
+        <View style={styles.categoryHeader}>
         <TouchableOpacity onPress={onBack} style={styles.backHeaderButton}>
           <Text style={styles.backHeaderButtonText}>← Back</Text>
         </TouchableOpacity>
@@ -560,12 +569,67 @@ function CategoryPage({ categoryValue, onBack, objects }) {
           <Text style={styles.emptyStateText}>Check back later or try another category</Text>
         </View>
       )}
-    </SafeAreaView>
+      </SafeAreaView>
+      </View>
+    </View>
+  );
+}
+
+// Left Sidebar Navigation
+function LeftSidebar({ currentPage, onNavigate }) {
+  return (
+    <View style={styles.leftSidebar}>
+      <View style={styles.sidebarBrand}>
+        <Text style={styles.sidebarBrandText}>NL</Text>
+      </View>
+      
+      <View style={styles.sidebarNav}>
+        <TouchableOpacity 
+          style={[styles.sidebarNavItem, currentPage === 'home' && styles.sidebarNavItemActive]}
+          onPress={() => onNavigate('home')}
+        >
+          <Text style={styles.sidebarNavIcon}>🏠</Text>
+          <Text style={styles.sidebarNavLabel}>Home</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={[styles.sidebarNavItem, currentPage === 'search' && styles.sidebarNavItemActive]}
+          onPress={() => onNavigate('search')}
+        >
+          <Text style={styles.sidebarNavIcon}>🔍</Text>
+          <Text style={styles.sidebarNavLabel}>Search</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={[styles.sidebarNavItem, (currentPage === 'creation1' || currentPage === 'creation2') && styles.sidebarNavItemActive]}
+          onPress={() => onNavigate('creation1')}
+        >
+          <Text style={styles.sidebarNavIcon}>➕</Text>
+          <Text style={styles.sidebarNavLabel}>Add Item</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={[styles.sidebarNavItem, currentPage === 'messages' && styles.sidebarNavItemActive]}
+          onPress={() => onNavigate('messages')}
+        >
+          <Text style={styles.sidebarNavIcon}>💬</Text>
+          <Text style={styles.sidebarNavLabel}>Messages</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={[styles.sidebarNavItem, currentPage === 'profile' && styles.sidebarNavItemActive]}
+          onPress={() => onNavigate('profile')}
+        >
+          <Text style={styles.sidebarNavIcon}>👤</Text>
+          <Text style={styles.sidebarNavLabel}>Profile</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
   );
 }
 
 // Home Page Component
-function HomePage({ onCreateObject, onCategorySelect, objects }) {
+function HomePage({ onCreateObject, onCategorySelect, objects, onNavigate, currentPage }) {
   const [searchQuery, setSearchQuery] = useState('');
 
   const categoryOptions = [
@@ -580,11 +644,15 @@ function HomePage({ onCreateObject, onCategorySelect, objects }) {
   ];
 
   const filteredObjects = objects.filter(obj =>
-    obj.name.toLowerCase().includes(searchQuery.toLowerCase())
+    obj.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    obj.description.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (
-    <>
+    <View style={styles.homeContainer}>
+      <LeftSidebar currentPage={currentPage} onNavigate={onNavigate} />
+      
+      <View style={styles.homeContent}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>NeighborLend</Text>
         <Text style={styles.headerSubtitle}>Share with your community</Text>
@@ -661,34 +729,8 @@ function HomePage({ onCreateObject, onCategorySelect, objects }) {
 
         <View style={styles.bottomSpacing} />
       </ScrollView>
-
-      {/* Bottom Navigation */}
-      <View style={styles.bottomNav}>
-        <TouchableOpacity style={styles.navItem}>
-          <Text style={styles.navIconActive}>🏠</Text>
-          <Text style={styles.navTextActive}>Home</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem}>
-          <Text style={styles.navIcon}>🔍</Text>
-          <Text style={styles.navText}>Search</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.navItem}
-          onPress={onCreateObject}
-        >
-          <Text style={styles.navIcon}>➕</Text>
-          <Text style={styles.navText}>Add</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem}>
-          <Text style={styles.navIcon}>💬</Text>
-          <Text style={styles.navText}>Messages</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem}>
-          <Text style={styles.navIcon}>👤</Text>
-          <Text style={styles.navText}>Profile</Text>
-        </TouchableOpacity>
       </View>
-    </>
+    </View>
   );
 }
 
@@ -736,7 +778,23 @@ export default function App() {
       ...objectData,
     };
     setObjects([...objects, newObject]);
-    Alert.alert('Success', 'Your object has been posted!');
+    
+    // Create detailed confirmation message
+    const categoryOptions = [
+      { emoji: '🔧', label: 'Tools', value: 'tools' },
+      { emoji: '⚽', label: 'Sports', value: 'sports' },
+      { emoji: '🍳', label: 'Kitchen', value: 'kitchen' },
+      { emoji: '🌱', label: 'Garden', value: 'garden' },
+      { emoji: '💻', label: 'Electronics', value: 'electronics' },
+      { emoji: '📚', label: 'Books', value: 'books' },
+      { emoji: '🎮', label: 'Games', value: 'games' },
+      { emoji: '👕', label: 'Clothing', value: 'clothing' },
+    ];
+    const categoryLabel = categoryOptions.find(c => c.value === objectData.category)?.label;
+    
+    const confirmationMessage = `✓ "${objectData.name}" posted!\n\n📂 Category: ${categoryLabel}\n💰 CA$${parseFloat(objectData.pricePerDay).toFixed(2)}/day\n📅 ${objectData.startDate} to ${objectData.endDate}\n\nYour item is now visible to neighbors!`;
+    
+    Alert.alert('Success', confirmationMessage);
     
     // Reset data
     setObjectData({
@@ -752,6 +810,14 @@ export default function App() {
     setCurrentPage('home');
   };
 
+  const handleNavigation = (page) => {
+    if (page === 'creation1') {
+      handleCreateObject();
+    } else {
+      setCurrentPage(page);
+    }
+  };
+
   return (
     <>
       {currentPage === 'home' && (
@@ -759,6 +825,8 @@ export default function App() {
           onCreateObject={handleCreateObject}
           onCategorySelect={handleCategorySelect}
           objects={objects}
+          onNavigate={handleNavigation}
+          currentPage={currentPage}
         />
       )}
       {currentPage === 'category' && (
@@ -766,6 +834,8 @@ export default function App() {
           categoryValue={selectedCategory}
           onBack={handleBackToHome}
           objects={objects}
+          onNavigate={handleNavigation}
+          currentPage={currentPage}
         />
       )}
       {currentPage === 'creation1' && (
@@ -773,6 +843,8 @@ export default function App() {
           onNext={handleNextPage}
           objectData={objectData}
           setObjectData={setObjectData}
+          onNavigate={handleNavigation}
+          currentPage={currentPage}
         />
       )}
       {currentPage === 'creation2' && (
@@ -781,6 +853,8 @@ export default function App() {
           onSubmit={handleSubmit}
           objectData={objectData}
           setObjectData={setObjectData}
+          onNavigate={handleNavigation}
+          currentPage={currentPage}
         />
       )}
     </>
@@ -1162,7 +1236,7 @@ const styles = StyleSheet.create({
   },
   imagePreview: {
     width: '100%',
-    height: 240,
+    height: 180,
     borderRadius: 10,
   },
   imageRemoveButton: {
@@ -1356,7 +1430,7 @@ const styles = StyleSheet.create({
   },
   objectCardImage: {
     width: '100%',
-    height: 140,
+    height: 100,
     backgroundColor: colors.lightBg,
   },
   objectCardContent: {
@@ -1446,5 +1520,106 @@ const styles = StyleSheet.create({
   // Misc
   spacer: {
     height: 30,
+  },
+
+  // Left Sidebar Styles
+  homeContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    backgroundColor: colors.background,
+  },
+  homeContent: {
+    flex: 1,
+    flexDirection: 'column',
+  },
+  leftSidebar: {
+    width: 80,
+    backgroundColor: colors.primary,
+    paddingVertical: 16,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 2, height: 0 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  sidebarBrand: {
+    width: 50,
+    height: 50,
+    borderRadius: 12,
+    backgroundColor: colors.secondary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  sidebarBrandText: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#fff',
+  },
+  sidebarNav: {
+    gap: 16,
+  },
+  sidebarNavItem: {
+    width: 60,
+    height: 60,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  sidebarNavItemActive: {
+    backgroundColor: colors.secondary,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  sidebarNavIcon: {
+    fontSize: 28,
+    marginBottom: 4,
+  },
+  sidebarNavLabel: {
+    fontSize: 10,
+    color: '#fff',
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+
+  // Category Grid Styles
+  categoryGridContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  categoryGridItem: {
+    width: '23%',
+    aspectRatio: 1,
+    borderRadius: 10,
+    backgroundColor: colors.lightBg,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+  },
+  categoryGridItemSelected: {
+    backgroundColor: 'rgba(46, 80, 144, 0.1)',
+    borderColor: colors.primary,
+    borderWidth: 2,
+  },
+  categoryGridEmoji: {
+    fontSize: 24,
+  },
+  categoryGridLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.text,
+    textAlign: 'center',
+  },
+  categoryGridLabelSelected: {
+    color: colors.primary,
+    fontWeight: '700',
   },
 });
