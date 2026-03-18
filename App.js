@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -15,6 +15,8 @@ import {
   Alert,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { realtimeDb } from './firebaseConfig';
+import { ref, set, onValue, remove } from 'firebase/database';
 
 // Color scheme - Modern, mature, professional
 const colors = {
@@ -750,6 +752,23 @@ export default function App() {
     image: null,
   });
 
+  // Load objects from Firebase on component mount
+  useEffect(() => {
+    const objectsRef = ref(realtimeDb, 'objects');
+    const unsubscribe = onValue(objectsRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        const objectsList = Object.values(data);
+        setObjects(objectsList);
+      } else {
+        setObjects([]);
+      }
+    });
+
+    // Cleanup listener on unmount
+    return () => unsubscribe();
+  }, []);
+
   const handleCreateObject = () => {
     setCurrentPage('creation1');
   };
@@ -773,41 +792,66 @@ export default function App() {
   };
 
   const handleSubmit = () => {
+    const objectId = Math.random().toString(36).substr(2, 9);
+    
+    // Create object without image (images stored separately)
     const newObject = {
-      id: Math.random().toString(36).substr(2, 9),
-      ...objectData,
+      id: objectId,
+      name: objectData.name,
+      category: objectData.category,
+      condition: objectData.condition,
+      startDate: objectData.startDate,
+      endDate: objectData.endDate,
+      pricePerDay: objectData.pricePerDay,
+      description: objectData.description,
+      imageUri: objectData.image, // Store image URI reference separately
+      timestamp: new Date().toISOString(),
     };
-    setObjects([...objects, newObject]);
     
-    // Create detailed confirmation message
-    const categoryOptions = [
-      { emoji: '🔧', label: 'Tools', value: 'tools' },
-      { emoji: '⚽', label: 'Sports', value: 'sports' },
-      { emoji: '🍳', label: 'Kitchen', value: 'kitchen' },
-      { emoji: '🌱', label: 'Garden', value: 'garden' },
-      { emoji: '💻', label: 'Electronics', value: 'electronics' },
-      { emoji: '📚', label: 'Books', value: 'books' },
-      { emoji: '🎮', label: 'Games', value: 'games' },
-      { emoji: '👕', label: 'Clothing', value: 'clothing' },
-    ];
-    const categoryLabel = categoryOptions.find(c => c.value === objectData.category)?.label;
+    console.log('Saving object to Firebase:', newObject);
     
-    const confirmationMessage = `✓ "${objectData.name}" posted!\n\n📂 Category: ${categoryLabel}\n💰 CA$${parseFloat(objectData.pricePerDay).toFixed(2)}/day\n📅 ${objectData.startDate} to ${objectData.endDate}\n\nYour item is now visible to neighbors!`;
-    
-    Alert.alert('Success', confirmationMessage);
-    
-    // Reset data
-    setObjectData({
-      name: '',
-      category: '',
-      condition: '',
-      startDate: new Date().toISOString().split('T')[0],
-      endDate: new Date(new Date().getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      pricePerDay: '',
-      description: '',
-      image: null,
-    });
-    setCurrentPage('home');
+    // Save to Firebase Realtime Database
+    const objectRef = ref(realtimeDb, 'objects/' + objectId);
+    set(objectRef, newObject)
+      .then(() => {
+        console.log('Object saved successfully to Firebase');
+        // Only update local state after successful Firebase save
+        setObjects([...objects, newObject]);
+        
+        // Create detailed confirmation message
+        const categoryOptions = [
+          { emoji: '🔧', label: 'Tools', value: 'tools' },
+          { emoji: '⚽', label: 'Sports', value: 'sports' },
+          { emoji: '🍳', label: 'Kitchen', value: 'kitchen' },
+          { emoji: '🌱', label: 'Garden', value: 'garden' },
+          { emoji: '💻', label: 'Electronics', value: 'electronics' },
+          { emoji: '📚', label: 'Books', value: 'books' },
+          { emoji: '🎮', label: 'Games', value: 'games' },
+          { emoji: '👕', label: 'Clothing', value: 'clothing' },
+        ];
+        const categoryLabel = categoryOptions.find(c => c.value === objectData.category)?.label;
+        
+        const confirmationMessage = `✓ "${objectData.name}" posted!\n\n📂 Category: ${categoryLabel}\n💰 CA$${parseFloat(objectData.pricePerDay).toFixed(2)}/day\n📅 ${objectData.startDate} to ${objectData.endDate}\n\nYour item is now visible to neighbors!`;
+        
+        Alert.alert('Success', confirmationMessage);
+        
+        // Reset data
+        setObjectData({
+          name: '',
+          category: '',
+          condition: '',
+          startDate: new Date().toISOString().split('T')[0],
+          endDate: new Date(new Date().getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          pricePerDay: '',
+          description: '',
+          image: null,
+        });
+        setCurrentPage('home');
+      })
+      .catch((error) => {
+        console.error('Firebase save error:', error);
+        Alert.alert('Error', 'Failed to save object: ' + error.message);
+      });
   };
 
   const handleNavigation = (page) => {
@@ -1623,3 +1667,4 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 });
+import { auth, db, storage } from './firebaseConfig';
