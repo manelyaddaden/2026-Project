@@ -17,6 +17,7 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import { realtimeDb } from './firebaseConfig';
 import { ref, set, onValue, remove } from 'firebase/database';
+import { supabase } from './supabaseConfig';
 
 // Color scheme - Modern, mature, professional
 const colors = {
@@ -335,6 +336,52 @@ function ObjectCreationPage1({ onNext, objectData, setObjectData, onNavigate, cu
   );
 }
 
+// Function to upload image to Supabase and get URL
+async function uploadImageToSupabase(imageUri) {
+  try {
+    // Generate unique filename (no nested path in filename)
+    const timestamp = Date.now();
+    const filename = `${timestamp}_${Math.random().toString(36).substr(2, 9)}.jpg`;
+    
+    console.log('🔄 Attempting to upload image to Supabase...');
+    
+    // Fetch the image as blob
+    const response = await fetch(imageUri);
+    const blob = await response.blob();
+    console.log('📸 Image blob size:', blob.size, 'bytes');
+    
+    // Upload to Supabase Storage
+    const { data, error } = await supabase.storage
+      .from('images')
+      .upload(filename, blob, {
+        contentType: 'image/jpeg',
+      });
+    
+    if (error) {
+      console.error('❌ Supabase upload error:', error);
+      console.error('Error details:', JSON.stringify(error, null, 2));
+      throw new Error('Failed to upload image: ' + error.message);
+    }
+    
+    console.log('✅ File uploaded, getting public URL...');
+    
+    // Get public URL
+    const { data: publicUrlData } = supabase.storage
+      .from('images')
+      .getPublicUrl(filename);
+    
+    if (!publicUrlData || !publicUrlData.publicUrl) {
+      throw new Error('Failed to generate public URL');
+    }
+    
+    console.log('✅ Image uploaded to Supabase:', publicUrlData.publicUrl);
+    return publicUrlData.publicUrl;
+  } catch (error) {
+    console.error('❌ Image upload error:', error);
+    throw error;
+  }
+}
+
 // Object Creation - Page 2: Description and Image
 function ObjectCreationPage2({ onBack, onSubmit, objectData, setObjectData, onNavigate, currentPage }) {
   const [imageUri, setImageUri] = useState(objectData.image);
@@ -379,14 +426,21 @@ function ObjectCreationPage2({ onBack, onSubmit, objectData, setObjectData, onNa
   };
 
   const handleSubmit = () => {
-    if (!objectData.description.trim()) {
-      Alert.alert('Required', 'Please enter a description');
+    console.log('ObjectCreationPage2 handleSubmit called');
+    console.log('objectData:', objectData);
+    console.log('imageUri:', imageUri);
+    
+    if (!objectData.description || !objectData.description.trim()) {
+      Alert.alert('Required Field', 'Please enter a description');
       return;
     }
+    
     if (!imageUri) {
-      Alert.alert('Required', 'Please upload an image');
+      Alert.alert('Required Field', 'Please upload an image');
       return;
     }
+    
+    console.log('Validation passed, calling onSubmit()');
     onSubmit();
   };
 
@@ -699,7 +753,7 @@ function HomePage({ onCreateObject, onCategorySelect, objects, onNavigate, curre
                 <View key={item.id} style={styles.objectGridItem}>
                   <View style={styles.objectCard}>
                     <Image
-                      source={{ uri: item.image }}
+                      source={{ uri: item.imageUrl }}
                       style={styles.objectCardImage}
                     />
                     <View style={styles.objectCardContent}>
@@ -792,66 +846,115 @@ export default function App() {
   };
 
   const handleSubmit = () => {
-    const objectId = Math.random().toString(36).substr(2, 9);
-    
-    // Create object without image (images stored separately)
-    const newObject = {
-      id: objectId,
-      name: objectData.name,
-      category: objectData.category,
-      condition: objectData.condition,
-      startDate: objectData.startDate,
-      endDate: objectData.endDate,
-      pricePerDay: objectData.pricePerDay,
-      description: objectData.description,
-      imageUri: objectData.image, // Store image URI reference separately
-      timestamp: new Date().toISOString(),
-    };
-    
-    console.log('Saving object to Firebase:', newObject);
-    
-    // Save to Firebase Realtime Database
-    const objectRef = ref(realtimeDb, 'objects/' + objectId);
-    set(objectRef, newObject)
-      .then(() => {
-        console.log('Object saved successfully to Firebase');
-        // Only update local state after successful Firebase save
-        setObjects([...objects, newObject]);
-        
-        // Create detailed confirmation message
-        const categoryOptions = [
-          { emoji: '🔧', label: 'Tools', value: 'tools' },
-          { emoji: '⚽', label: 'Sports', value: 'sports' },
-          { emoji: '🍳', label: 'Kitchen', value: 'kitchen' },
-          { emoji: '🌱', label: 'Garden', value: 'garden' },
-          { emoji: '💻', label: 'Electronics', value: 'electronics' },
-          { emoji: '📚', label: 'Books', value: 'books' },
-          { emoji: '🎮', label: 'Games', value: 'games' },
-          { emoji: '👕', label: 'Clothing', value: 'clothing' },
-        ];
-        const categoryLabel = categoryOptions.find(c => c.value === objectData.category)?.label;
-        
-        const confirmationMessage = `✓ "${objectData.name}" posted!\n\n📂 Category: ${categoryLabel}\n💰 CA$${parseFloat(objectData.pricePerDay).toFixed(2)}/day\n📅 ${objectData.startDate} to ${objectData.endDate}\n\nYour item is now visible to neighbors!`;
-        
-        Alert.alert('Success', confirmationMessage);
-        
-        // Reset data
-        setObjectData({
-          name: '',
-          category: '',
-          condition: '',
-          startDate: new Date().toISOString().split('T')[0],
-          endDate: new Date(new Date().getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          pricePerDay: '',
-          description: '',
-          image: null,
+    try {
+      // Validate all required data before saving
+      if (!objectData.name?.trim()) {
+        Alert.alert('Validation Error', 'Object name is required');
+        return;
+      }
+      if (!objectData.category) {
+        Alert.alert('Validation Error', 'Category is required');
+        return;
+      }
+      if (!objectData.condition) {
+        Alert.alert('Validation Error', 'Condition is required');
+        return;
+      }
+      if (!objectData.startDate || !objectData.endDate) {
+        Alert.alert('Validation Error', 'Availability dates are required');
+        return;
+      }
+      if (!objectData.pricePerDay || parseFloat(objectData.pricePerDay) <= 0) {
+        Alert.alert('Validation Error', 'Valid price per day is required');
+        return;
+      }
+      if (!objectData.description?.trim()) {
+        Alert.alert('Validation Error', 'Description is required');
+        return;
+      }
+      if (!objectData.image) {
+        Alert.alert('Validation Error', 'An image is required');
+        return;
+      }
+
+      // Show loading alert
+      Alert.alert('Uploading...', 'Uploading your image to Supabase...');
+
+      const objectId = Math.random().toString(36).substr(2, 9);
+      
+      // Upload image to Supabase first
+      uploadImageToSupabase(objectData.image)
+        .then((imageUrl) => {
+          // Create object with Supabase image URL
+          const newObject = {
+            id: objectId,
+            name: objectData.name.trim(),
+            category: objectData.category,
+            condition: objectData.condition,
+            startDate: objectData.startDate,
+            endDate: objectData.endDate,
+            pricePerDay: objectData.pricePerDay.toString(),
+            description: objectData.description.trim(),
+            imageUrl: imageUrl, // Store Supabase image URL
+            timestamp: new Date().toISOString(),
+          };
+          
+          console.log('Saving object to Firebase with image URL:', newObject);
+          
+          // Save to Firebase Realtime Database
+          const objectRef = ref(realtimeDb, 'objects/' + objectId);
+          set(objectRef, newObject)
+            .then(() => {
+              console.log('✅ Object saved successfully to Firebase');
+              // Only update local state after successful Firebase save
+              setObjects([...objects, newObject]);
+              
+              // Create detailed confirmation message
+              const categoryOptions = [
+                { emoji: '🔧', label: 'Tools', value: 'tools' },
+                { emoji: '⚽', label: 'Sports', value: 'sports' },
+                { emoji: '🍳', label: 'Kitchen', value: 'kitchen' },
+                { emoji: '🌱', label: 'Garden', value: 'garden' },
+                { emoji: '💻', label: 'Electronics', value: 'electronics' },
+                { emoji: '📚', label: 'Books', value: 'books' },
+                { emoji: '🎮', label: 'Games', value: 'games' },
+                { emoji: '👕', label: 'Clothing', value: 'clothing' },
+              ];
+              const categoryLabel = categoryOptions.find(c => c.value === objectData.category)?.label;
+              
+              const confirmationMessage = `✓ "${objectData.name}" posted!\n\n📂 Category: ${categoryLabel}\n💰 CA$${parseFloat(objectData.pricePerDay).toFixed(2)}/day\n📅 ${objectData.startDate} to ${objectData.endDate}\n\nYour item is now visible to neighbors!`;
+              
+              Alert.alert('Success', confirmationMessage);
+              
+              // Reset data
+              setObjectData({
+                name: '',
+                category: '',
+                condition: '',
+                startDate: new Date().toISOString().split('T')[0],
+                endDate: new Date(new Date().getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                pricePerDay: '',
+                description: '',
+                image: null,
+              });
+              setCurrentPage('home');
+            })
+            .catch((error) => {
+              console.error('❌ Firebase save error:', error);
+              console.error('Error code:', error.code);
+              console.error('Error message:', error.message);
+              console.error('Full error:', JSON.stringify(error, null, 2));
+              Alert.alert('Error Saving Object', 'Failed to save object:\n' + error.message);
+            });
+        })
+        .catch((error) => {
+          console.error('❌ Image upload error:', error);
+          Alert.alert('Upload Error', 'Failed to upload image:\n' + error.message);
         });
-        setCurrentPage('home');
-      })
-      .catch((error) => {
-        console.error('Firebase save error:', error);
-        Alert.alert('Error', 'Failed to save object: ' + error.message);
-      });
+    } catch (error) {
+      console.error('Unexpected error in handleSubmit:', error);
+      Alert.alert('Unexpected Error', 'An unexpected error occurred: ' + error.message);
+    }
   };
 
   const handleNavigation = (page) => {
@@ -1667,4 +1770,3 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 });
-import { auth, db, storage } from './firebaseConfig';

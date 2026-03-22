@@ -11,7 +11,7 @@ const firebaseConfig = {
   storageBucket: "lendify-33a22.firebasestorage.app",
   messagingSenderId: "935209715452",
   appId: "1:935209715452:web:1cf478801c7ef71343b979",
-  databaseURL: "https://lendify-33a22.firebaseio.com"
+  databaseURL: "https://lendify-33a22-default-rtdb.firebaseio.com"
 };
 
 const app = initializeApp(firebaseConfig);
