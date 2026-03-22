@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import {
   StyleSheet,
   Text,
@@ -13,11 +13,14 @@ import {
   Pressable,
   FlatList,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { realtimeDb } from './firebaseConfig';
 import { ref, set, onValue, remove } from 'firebase/database';
 import { supabase } from './supabaseConfig';
+import { AuthProvider, AuthContext } from './AuthContext';
+import { AuthScreen } from './AuthScreen';
 
 // Color scheme - Modern, mature, professional
 const colors = {
@@ -687,6 +690,27 @@ function LeftSidebar({ currentPage, onNavigate }) {
 // Home Page Component
 function HomePage({ onCreateObject, onCategorySelect, objects, onNavigate, currentPage }) {
   const [searchQuery, setSearchQuery] = useState('');
+  const { username, logout } = useContext(AuthContext);
+
+  const handleLogout = async () => {
+    Alert.alert(
+      'Logout',
+      'Are you sure you want to logout?',
+      [
+        { text: 'Cancel', onPress: () => {}, style: 'cancel' },
+        {
+          text: 'Logout',
+          onPress: async () => {
+            const result = await logout();
+            if (!result.success) {
+              Alert.alert('Error', 'Failed to logout: ' + result.error);
+            }
+          },
+          style: 'destructive',
+        },
+      ]
+    );
+  };
 
   const categoryOptions = [
     { emoji: '🔧', label: 'Tools', value: 'tools' },
@@ -710,8 +734,19 @@ function HomePage({ onCreateObject, onCategorySelect, objects, onNavigate, curre
       
       <View style={styles.homeContent}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>NeighborLend</Text>
-        <Text style={styles.headerSubtitle}>Share with your community</Text>
+        <View style={styles.headerContent}>
+          <Text style={styles.headerTitle}>NeighborLend</Text>
+          <Text style={styles.headerSubtitle}>Share with your community</Text>
+        </View>
+        <View style={styles.userSection}>
+          <Text style={styles.username}>👤 {username}</Text>
+          <TouchableOpacity
+            style={styles.logoutButton}
+            onPress={handleLogout}
+          >
+            <Text style={styles.logoutButtonText}>Logout</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
@@ -791,7 +826,7 @@ function HomePage({ onCreateObject, onCategorySelect, objects, onNavigate, curre
 }
 
 // Main App Component
-export default function App() {
+function MainApp() {
   const [currentPage, setCurrentPage] = useState('home');
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [objects, setObjects] = useState([]);
@@ -1008,6 +1043,34 @@ export default function App() {
   );
 }
 
+// Main App wrapper with authentication
+function AppContent() {
+  const { user, loading, logout } = useContext(AuthContext);
+
+  if (loading) {
+    return (
+      <SafeAreaView style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </SafeAreaView>
+    );
+  }
+
+  if (!user) {
+    return <AuthScreen />;
+  }
+
+  return <MainApp />;
+}
+
+// Root App component with AuthProvider
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
+  );
+}
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -1034,6 +1097,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 3,
     elevation: 3,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  headerContent: {
+    flex: 1,
   },
   headerTitle: {
     fontSize: 32,
@@ -1045,6 +1114,28 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.85)',
     marginTop: 4,
     fontWeight: '500',
+  },
+  userSection: {
+    alignItems: 'flex-end',
+  },
+  username: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginBottom: 8,
+  },
+  logoutButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
+  },
+  logoutButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
   },
 
   // Page Header (for creation pages)
