@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useMemo } from 'react';
 import {
   StyleSheet,
   Text,
@@ -14,10 +14,15 @@ import {
   FlatList,
   Alert,
   ActivityIndicator,
+  useWindowDimensions,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { realtimeDb } from './firebaseConfig';
-import { ref, set, onValue, remove } from 'firebase/database';
+import { ref, set, onValue, get, update } from 'firebase/database';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from './firebaseConfig';
 import { supabase } from './supabaseConfig';
 import { AuthProvider, AuthContext } from './AuthContext';
 import { AuthScreen } from './AuthScreen';
@@ -35,6 +40,31 @@ const colors = {
   success: '#27AE60',
   warning: '#E67E22',
 };
+
+function legacySellerKeyFromUsername(username) {
+  if (!username) return null;
+  return 'legacy_' + String(username).replace(/[.#$\[\]\/\s]/g, '_');
+}
+
+function getSellerKeyForProduct(product, sellerUsernameFallback) {
+  if (!product) return null;
+  // Use ownerUid if available and not null/empty
+  if (product.ownerUid && product.ownerUid.trim?.() !== '') {
+    return product.ownerUid;
+  }
+  // Fall back to username-based key
+  const sellerName = product.username || sellerUsernameFallback;
+  if (!sellerName) return null;
+  return legacySellerKeyFromUsername(sellerName);
+}
+
+function isViewerTheSeller(product, viewerUid, viewerUsername, sellerUsernameFallback) {
+  if (!product) return false;
+  if (product.ownerUid && viewerUid) return product.ownerUid === viewerUid;
+  const sellerName = product.username || sellerUsernameFallback;
+  if (sellerName && viewerUsername) return sellerName === viewerUsername;
+  return false;
+}
 
 // Category Grid Component - Horizontal 2-line layout
 function CategoryGrid({ label, value, options, onSelect }) {
@@ -191,6 +221,9 @@ function DateRangePicker({ label, startDate, endDate, onSelect, showConfirmButto
 
 // Object Creation - Page 1: Basic Information
 function ObjectCreationPage1({ onNext, objectData, setObjectData, onNavigate, currentPage }) {
+  const { width } = useWindowDimensions();
+  const isPhone = width < 768;
+
   const categoryOptions = [
     { emoji: '🔧', label: 'Tools', value: 'tools' },
     { emoji: '⚽', label: 'Sports', value: 'sports' },
@@ -234,8 +267,8 @@ function ObjectCreationPage1({ onNext, objectData, setObjectData, onNavigate, cu
   };
 
   return (
-    <View style={styles.homeContainer}>
-      <LeftSidebar currentPage={currentPage} onNavigate={onNavigate} />
+    <View style={isPhone ? styles.homeContainerMobile : styles.homeContainer}>
+      {!isPhone && <LeftSidebar currentPage={currentPage} onNavigate={onNavigate} />}
       
       <View style={styles.homeContent}>
       <SafeAreaView style={styles.container}>
@@ -256,7 +289,7 @@ function ObjectCreationPage1({ onNext, objectData, setObjectData, onNavigate, cu
       <ScrollView
         style={styles.pageContent}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={isPhone ? styles.scrollContentWithBottomNav : styles.scrollContent}
       >
         {/* Object Name */}
         <View style={styles.inputGroup}>
@@ -323,8 +356,8 @@ function ObjectCreationPage1({ onNext, objectData, setObjectData, onNavigate, cu
         <View style={styles.spacer} />
       </ScrollView>
 
-      {/* Next Button */}
-      <View style={styles.buttonContainer}>
+      {/* Next Button — extra bottom inset so tab bar does not cover it */}
+      <View style={[styles.buttonContainer, isPhone && styles.buttonContainerAboveBottomNav]}>
         <TouchableOpacity
           style={styles.nextButton}
           onPress={handleNext}
@@ -335,6 +368,7 @@ function ObjectCreationPage1({ onNext, objectData, setObjectData, onNavigate, cu
       </View>
       </SafeAreaView>
       </View>
+      {isPhone && <BottomNav currentPage={currentPage} onNavigate={onNavigate} />}
     </View>
   );
 }
@@ -387,6 +421,8 @@ async function uploadImageToSupabase(imageUri) {
 
 // Object Creation - Page 2: Description and Image
 function ObjectCreationPage2({ onBack, onSubmit, objectData, setObjectData, onNavigate, currentPage }) {
+  const { width } = useWindowDimensions();
+  const isPhone = width < 768;
   const [imageUri, setImageUri] = useState(objectData.image);
 
   const pickImage = async () => {
@@ -398,8 +434,9 @@ function ObjectCreationPage2({ onBack, onSubmit, objectData, setObjectData, onNa
 
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [4, 3],
+      // Android's edit UI only shows Back + resize/crop — skip it; image still previews in-app
+      allowsEditing: Platform.OS === 'ios',
+      ...(Platform.OS === 'ios' ? { aspect: [4, 3] } : {}),
       quality: 0.8,
     });
 
@@ -417,8 +454,8 @@ function ObjectCreationPage2({ onBack, onSubmit, objectData, setObjectData, onNa
     }
 
     const result = await ImagePicker.launchCameraAsync({
-      allowsEditing: true,
-      aspect: [4, 3],
+      allowsEditing: Platform.OS === 'ios',
+      ...(Platform.OS === 'ios' ? { aspect: [4, 3] } : {}),
       quality: 0.8,
     });
 
@@ -448,8 +485,8 @@ function ObjectCreationPage2({ onBack, onSubmit, objectData, setObjectData, onNa
   };
 
   return (
-    <View style={styles.homeContainer}>
-      <LeftSidebar currentPage={currentPage} onNavigate={onNavigate} />
+    <View style={isPhone ? styles.homeContainerMobile : styles.homeContainer}>
+      {!isPhone && <LeftSidebar currentPage={currentPage} onNavigate={onNavigate} />}
       
       <View style={styles.homeContent}>
       <SafeAreaView style={styles.container}>
@@ -470,7 +507,7 @@ function ObjectCreationPage2({ onBack, onSubmit, objectData, setObjectData, onNa
       <ScrollView
         style={styles.pageContent}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={isPhone ? styles.scrollContentWithBottomNav : styles.scrollContent}
       >
         {/* Description */}
         <View style={styles.inputGroup}>
@@ -537,8 +574,8 @@ function ObjectCreationPage2({ onBack, onSubmit, objectData, setObjectData, onNa
         <View style={styles.spacer} />
       </ScrollView>
 
-      {/* Action Buttons */}
-      <View style={styles.buttonContainer}>
+      {/* Action Buttons — extra bottom inset so tab bar does not cover Post / Back */}
+      <View style={[styles.buttonContainer, isPhone && styles.buttonContainerAboveBottomNav]}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={onBack}
@@ -556,12 +593,722 @@ function ObjectCreationPage2({ onBack, onSubmit, objectData, setObjectData, onNa
       </View>
       </SafeAreaView>
       </View>
+      {isPhone && <BottomNav currentPage={currentPage} onNavigate={onNavigate} />}
+    </View>
+  );
+}
+
+// Product Detail Screen Component
+function ProductDetailScreen({ product, onBack, username, onSellerSelect }) {
+  const { user, username: authUsername } = useContext(AuthContext);
+  const [reviewModalVisible, setReviewModalVisible] = useState(false);
+  const [reviewStars, setReviewStars] = useState(5);
+  const [reviewComment, setReviewComment] = useState('');
+  const [submittingReview, setSubmittingReview] = useState(false);
+  const [myReview, setMyReview] = useState(null);
+
+  const categoryOptions = [
+    { emoji: '🔧', label: 'Tools', value: 'tools' },
+    { emoji: '⚽', label: 'Sports', value: 'sports' },
+    { emoji: '🍳', label: 'Kitchen', value: 'kitchen' },
+    { emoji: '🌱', label: 'Garden', value: 'garden' },
+    { emoji: '💻', label: 'Electronics', value: 'electronics' },
+    { emoji: '📚', label: 'Books', value: 'books' },
+    { emoji: '🎮', label: 'Games', value: 'games' },
+    { emoji: '👕', label: 'Clothing', value: 'clothing' },
+  ];
+
+  const categoryLabel = categoryOptions.find(c => c.value === product.category)?.label;
+  const categoryEmoji = categoryOptions.find(c => c.value === product.category)?.emoji;
+  // Get a valid seller identifier
+  const sellerKey = getSellerKeyForProduct(product, username);
+  // Check if current viewer is the seller of this product
+  const iAmSeller = isViewerTheSeller(product, user?.uid, authUsername, username);
+  // Determine if review button should be enabled
+  const canReview = !iAmSeller && !myReview && !!sellerKey;
+
+  useEffect(() => {
+    if (!user?.uid || !product?.id) {
+      setMyReview(null);
+      return;
+    }
+    const r = ref(realtimeDb, `itemReviews/${product.id}/${user.uid}`);
+    const unsub = onValue(r, (snapshot) => {
+      setMyReview(snapshot.val());
+    });
+    return () => unsub();
+  }, [product?.id, user?.uid]);
+
+  const openReviewModal = () => {
+    if (!user) {
+      Alert.alert('Sign in required', 'Please sign in to leave a review.');
+      return;
+    }
+    if (iAmSeller) {
+      Alert.alert('Cannot review own item', 'You cannot review your own listings.');
+      return;
+    }
+    if (myReview) {
+      Alert.alert('Already reviewed', 'You can only leave one review per item. Edit or delete your review to change it.');
+      return;
+    }
+    if (!sellerKey) {
+      Alert.alert('Unable to submit', 'This seller cannot receive reviews at this time. Please ensure the listing has valid seller information.');
+      return;
+    }
+    setReviewStars(5);
+    setReviewComment('');
+    setReviewModalVisible(true);
+  };
+
+  const submitReview = async () => {
+    if (!user?.uid) {
+      Alert.alert('Error', 'You must be signed in to submit a review.');
+      return;
+    }
+    if (!sellerKey) {
+      Alert.alert('Error', 'Cannot determine seller information. Please try viewing the item again.');
+      return;
+    }
+    const comment = reviewComment.trim();
+    if (reviewStars < 1 || reviewStars > 5) {
+      Alert.alert('Rating', 'Please choose a star rating from 1 to 5.');
+      return;
+    }
+    if (!comment) {
+      Alert.alert('Comment required', 'Please write a short comment about your experience.');
+      return;
+    }
+    if (comment.length > 500) {
+      Alert.alert('Comment too long', 'Please keep your comment under 500 characters.');
+      return;
+    }
+
+    setSubmittingReview(true);
+    try {
+      const itemPath = `itemReviews/${product.id}/${user.uid}`;
+      const existing = await get(ref(realtimeDb, itemPath));
+      if (existing.exists()) {
+        Alert.alert('Already reviewed', 'You can only leave one review per item.');
+        setSubmittingReview(false);
+        return;
+      }
+      const compositeKey = `${product.id}_${user.uid}`;
+      const createdAt = new Date().toISOString();
+      const payload = {
+        stars: reviewStars,
+        comment,
+        createdAt,
+        reviewerName: authUsername || 'Member',
+        reviewerUid: user.uid,
+        sellerKey,
+        itemId: product.id,
+      };
+      await update(ref(realtimeDb), {
+        [itemPath]: payload,
+        [`sellerReviews/${sellerKey}/${compositeKey}`]: payload,
+      });
+      setReviewModalVisible(false);
+      setReviewComment('');
+      Alert.alert('Thank you', 'Your review was submitted.');
+    } catch (e) {
+      console.error(e);
+      Alert.alert('Error', e.message || 'Could not submit review.');
+    } finally {
+      setSubmittingReview(false);
+    }
+  };
+
+  return (
+    <View style={styles.homeContainerMobile}>
+      <View style={styles.homeContent}>
+        <SafeAreaView style={styles.container}>
+          <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+
+          <Modal
+            visible={reviewModalVisible}
+            animationType="fade"
+            transparent
+            onRequestClose={() => !submittingReview && setReviewModalVisible(false)}
+          >
+            <Pressable
+              style={styles.reviewModalOverlay}
+              onPress={() => !submittingReview && setReviewModalVisible(false)}
+            >
+              <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                style={styles.reviewModalAvoid}
+              >
+                <Pressable style={styles.reviewModalCard} onPress={(e) => e.stopPropagation()}>
+                  <Text style={styles.reviewModalTitle}>Rate this seller</Text>
+                  <Text style={styles.reviewModalSubtitle}>How was your experience?</Text>
+                  <View style={styles.reviewStarsRow}>
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <TouchableOpacity
+                        key={n}
+                        onPress={() => setReviewStars(n)}
+                        style={styles.reviewStarHit}
+                        disabled={submittingReview}
+                      >
+                        <Text
+                          style={[
+                            styles.reviewStarEmoji,
+                            n > reviewStars && styles.reviewStarEmojiDim,
+                          ]}
+                        >
+                          ⭐
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  <Text style={styles.reviewModalLabel}>Comment</Text>
+                  <TextInput
+                    style={styles.reviewModalInput}
+                    placeholder="Share a brief note about the lender…"
+                    placeholderTextColor={colors.lightText}
+                    value={reviewComment}
+                    onChangeText={setReviewComment}
+                    multiline
+                    maxLength={500}
+                    editable={!submittingReview}
+                  />
+                  <Text style={styles.reviewCommentCount}>{reviewComment.length}/500</Text>
+                  <View style={styles.reviewModalActions}>
+                    <TouchableOpacity
+                      style={styles.reviewModalCancel}
+                      onPress={() => setReviewModalVisible(false)}
+                      disabled={submittingReview}
+                    >
+                      <Text style={styles.reviewModalCancelText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.reviewModalSubmit,
+                        submittingReview && styles.reviewModalSubmitDisabled,
+                      ]}
+                      onPress={submitReview}
+                      disabled={submittingReview}
+                    >
+                      <Text style={styles.reviewModalSubmitText}>
+                        {submittingReview ? 'Submitting…' : 'Submit'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </Pressable>
+              </KeyboardAvoidingView>
+            </Pressable>
+          </Modal>
+
+          {/* Header */}
+          <View style={styles.categoryHeader}>
+            <TouchableOpacity onPress={onBack} style={styles.backHeaderButton}>
+              <Text style={styles.backHeaderButtonText}>← Back</Text>
+            </TouchableOpacity>
+            <View style={styles.categoryHeaderContent}>
+              <Text style={styles.categoryHeaderEmoji}>{categoryEmoji}</Text>
+              <View>
+                <Text style={styles.categoryHeaderTitle}>Product Details</Text>
+                <Text style={styles.categoryHeaderCount}>{categoryLabel}</Text>
+              </View>
+            </View>
+            <View style={styles.headerSpacer} />
+          </View>
+
+          <ScrollView
+            style={styles.pageContent}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.scrollContent}
+          >
+            {/* Product Image */}
+            <View style={styles.detailImageContainer}>
+              <Image
+                source={{ uri: product.imageUrl }}
+                style={styles.detailImage}
+              />
+            </View>
+
+            {/* Product Info Card */}
+            <View style={styles.detailCard}>
+              {/* Title and Price */}
+              <View style={styles.detailHeader}>
+                <View style={styles.detailTitleSection}>
+                  <Text style={styles.detailTitle}>{product.name}</Text>
+                  <Text style={styles.detailPrice}>CA${parseFloat(product.pricePerDay).toFixed(2)}/day</Text>
+                </View>
+              </View>
+
+              {/* Basic Info Grid */}
+              <View style={styles.detailInfoGrid}>
+                <View style={styles.detailInfoItem}>
+                  <Text style={styles.detailInfoLabel}>Condition</Text>
+                  <Text style={styles.detailInfoValue}>{product.condition}</Text>
+                </View>
+                <View style={styles.detailInfoItem}>
+                  <Text style={styles.detailInfoLabel}>Category</Text>
+                  <Text style={styles.detailInfoValue}>{categoryLabel}</Text>
+                </View>
+                <View style={styles.detailInfoItem}>
+                  <Text style={styles.detailInfoLabel}>Available From</Text>
+                  <Text style={styles.detailInfoValue}>{product.startDate}</Text>
+                </View>
+                <View style={styles.detailInfoItem}>
+                  <Text style={styles.detailInfoLabel}>Available Until</Text>
+                  <Text style={styles.detailInfoValue}>{product.endDate}</Text>
+                </View>
+              </View>
+
+              {/* Description */}
+              <View style={styles.detailSection}>
+                <Text style={styles.detailSectionTitle}>Description</Text>
+                <Text style={styles.detailDescription}>{product.description}</Text>
+              </View>
+
+              {/* Owner Info - Clickable */}
+              <TouchableOpacity 
+                style={styles.detailOwnerCard}
+                onPress={() => onSellerSelect && onSellerSelect(product.username || username, product.ownerUid)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.ownerInfoContainer}>
+                  <View style={styles.ownerAvatar}>
+                    <Text style={styles.ownerAvatarText}>👤</Text>
+                  </View>
+                  <View style={styles.ownerDetails}>
+                    <Text style={styles.ownerLabel}>Posted by</Text>
+                    <Text style={styles.ownerName}>{product.username || username || 'Anonymous'}</Text>
+                  </View>
+                  <Text style={styles.ownerArrow}>→</Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.detailRateSellerButton,
+                  !canReview && styles.detailRateSellerButtonDisabled,
+                ]}
+                onPress={openReviewModal}
+                disabled={!canReview}
+              >
+                <Text style={styles.detailRateSellerIcon}>⭐</Text>
+                <Text style={styles.detailRateSellerText}>
+                  {iAmSeller ? 'Your own item' : myReview ? 'You reviewed this seller' : 'Rate this seller'}
+                </Text>
+              </TouchableOpacity>
+
+              {/* Action Button */}
+              <TouchableOpacity style={styles.detailActionButton}>
+                <Text style={styles.detailActionButtonIcon}>💬</Text>
+                <Text style={styles.detailActionButtonText}>Contact Lender</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.spacer} />
+          </ScrollView>
+        </SafeAreaView>
+      </View>
+    </View>
+  );
+}
+
+function formatReviewDate(iso) {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    });
+  } catch {
+    return iso;
+  }
+}
+
+function ProfilePage({ onNavigate, currentPage }) {
+  const { user, username, logout } = useContext(AuthContext);
+  const [reviewsUid, setReviewsUid] = useState({});
+  const [reviewsLegacy, setReviewsLegacy] = useState({});
+
+  const legacyKey = legacySellerKeyFromUsername(username);
+
+  useEffect(() => {
+    if (!user?.uid) return;
+    const r1 = ref(realtimeDb, `sellerReviews/${user.uid}`);
+    const unsub1 = onValue(r1, (snap) => {
+      setReviewsUid(snap.val() || {});
+    });
+    return () => unsub1();
+  }, [user?.uid]);
+
+  useEffect(() => {
+    if (!legacyKey) {
+      setReviewsLegacy({});
+      return;
+    }
+    const r2 = ref(realtimeDb, `sellerReviews/${legacyKey}`);
+    const unsub2 = onValue(r2, (snap) => {
+      setReviewsLegacy(snap.val() || {});
+    });
+    return () => unsub2();
+  }, [legacyKey]);
+
+  const mergedReviews = useMemo(() => {
+    const byKey = new Map();
+    Object.entries(reviewsLegacy).forEach(([k, v]) => byKey.set(k, v));
+    Object.entries(reviewsUid).forEach(([k, v]) => byKey.set(k, v));
+    const list = Array.from(byKey.values());
+    list.sort((a, b) => {
+      const ta = new Date(a.createdAt || 0).getTime();
+      const tb = new Date(b.createdAt || 0).getTime();
+      return tb - ta;
+    });
+    return list;
+  }, [reviewsUid, reviewsLegacy]);
+
+  const reviewCount = mergedReviews.length;
+  const averageStars =
+    reviewCount > 0
+      ? mergedReviews.reduce((s, r) => s + (Number(r.stars) || 0), 0) / reviewCount
+      : 0;
+
+  const handleLogout = async () => {
+    Alert.alert('Logout', 'Are you sure you want to logout?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Logout',
+        style: 'destructive',
+        onPress: async () => {
+          const result = await logout();
+          if (!result.success) {
+            Alert.alert('Error', result.error || 'Logout failed');
+          }
+        },
+      },
+    ]);
+  };
+
+  return (
+    <View style={styles.homeContainerMobile}>
+      <View style={styles.homeContent}>
+        <SafeAreaView style={styles.container}>
+          <StatusBar barStyle="light-content" backgroundColor={colors.primary} />
+          <View style={styles.header}>
+            <View style={styles.headerContent}>
+              <Text style={styles.headerTitle}>Profile</Text>
+              <Text style={styles.headerSubtitle}>
+                {username ? `@${username}` : 'Your account'}
+              </Text>
+            </View>
+            <View style={styles.userSection}>
+              <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+                <Text style={styles.logoutButtonText}>Logout</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {mergedReviews.length === 0 ? (
+            <ScrollView
+              style={styles.pageContent}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.scrollContent}
+            >
+              <View style={styles.profileSummaryCard}>
+                <View style={styles.profileRatingRow}>
+                  <Text style={styles.profileRatingStars}>
+                    {reviewCount === 0 ? '—' : `${averageStars.toFixed(1)} ★`}
+                  </Text>
+                  <Text style={styles.profileRatingMeta}>
+                    {reviewCount === 0
+                      ? 'No reviews yet'
+                      : `${reviewCount} review${reviewCount === 1 ? '' : 's'}`}
+                  </Text>
+                </View>
+                {user?.email ? (
+                  <Text style={styles.profileEmail}>{user.email}</Text>
+                ) : null}
+              </View>
+
+              <Text style={styles.profileSectionTitle}>Reviews about you</Text>
+              <View style={styles.profileEmptyReviews}>
+                <Text style={styles.profileEmptyEmoji}>💬</Text>
+                <Text style={styles.profileEmptyTitle}>No reviews yet</Text>
+                <Text style={styles.profileEmptyText}>
+                  When borrowers rate you on their item pages, reviews will show up here.
+                </Text>
+              </View>
+            </ScrollView>
+          ) : (
+            <>
+              <View style={styles.profileSummaryCard}>
+                <View style={styles.profileRatingRow}>
+                  <Text style={styles.profileRatingStars}>
+                    {reviewCount === 0 ? '—' : `${averageStars.toFixed(1)} ★`}
+                  </Text>
+                  <Text style={styles.profileRatingMeta}>
+                    {reviewCount === 0
+                      ? 'No reviews yet'
+                      : `${reviewCount} review${reviewCount === 1 ? '' : 's'}`}
+                  </Text>
+                </View>
+                {user?.email ? (
+                  <Text style={styles.profileEmail}>{user.email}</Text>
+                ) : null}
+              </View>
+
+              <Text style={styles.profileSectionTitle}>Reviews about you</Text>
+              <FlatList
+                data={mergedReviews}
+                keyExtractor={(item, index) =>
+                  `${item.itemId || 'x'}_${item.reviewerUid || index}`
+                }
+                style={styles.profileReviewsList}
+                contentContainerStyle={styles.profileReviewsListContent}
+                scrollEnabled={true}
+                renderItem={({ item }) => (
+                  <View style={styles.profileReviewCard}>
+                    <View style={styles.profileReviewHeader}>
+                      <Text style={styles.profileReviewName} numberOfLines={1}>
+                        {item.reviewerName || 'Member'}
+                      </Text>
+                      <Text style={styles.profileReviewDate}>
+                        {formatReviewDate(item.createdAt)}
+                      </Text>
+                    </View>
+                    <Text style={styles.profileReviewStars}>
+                      {'⭐'.repeat(Math.min(5, Math.max(0, Number(item.stars) || 0)))}
+                    </Text>
+                    <Text style={styles.profileReviewComment}>{item.comment}</Text>
+                  </View>
+                )}
+              />
+            </>
+          )}
+        </SafeAreaView>
+      </View>
+      <BottomNav currentPage={currentPage} onNavigate={onNavigate} />
+    </View>
+  );
+}
+
+// Seller Profile Page Component
+function SellerProfilePage({ sellerUsername, sellerUid, onBack, objects, onProductSelect }) {
+  const [sellerData, setSellerData] = useState(null);
+  const [sellerReviews, setSellerReviews] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    // Fetch seller data from Firestore
+    const fetchSellerData = async () => {
+      try {
+        // Get seller phone number from Firestore
+        const userDoc = await getDoc(doc(db, 'users', sellerUid));
+        if (userDoc.exists()) {
+          setSellerData({
+            username: sellerUsername,
+            phone: userDoc.data().phoneNumber || '',
+            email: userDoc.data().email || '',
+            uid: sellerUid,
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching seller data:', error);
+      }
+    };
+
+    // Fetch seller reviews from Firebase Realtime Database
+    const fetchSellerReviews = async () => {
+      try {
+        // Try by UID first
+        const reviewsRef = ref(realtimeDb, `sellerReviews/${sellerUid}`);
+        const snapshot = await get(reviewsRef);
+        const reviews = [];
+        
+        if (snapshot.exists()) {
+          const reviewsObj = snapshot.val();
+          Object.values(reviewsObj).forEach(review => {
+            reviews.push(review);
+          });
+        }
+
+        // Also try legacy username-based key
+        const legacyKey = legacySellerKeyFromUsername(sellerUsername);
+        if (legacyKey) {
+          const legacyRef = ref(realtimeDb, `sellerReviews/${legacyKey}`);
+          const legacySnapshot = await get(legacyRef);
+          if (legacySnapshot.exists()) {
+            const legacyReviews = legacySnapshot.val();
+            Object.values(legacyReviews).forEach(review => {
+              // Check if not already added
+              if (!reviews.find(r => r.createdAt === review.createdAt)) {
+                reviews.push(review);
+              }
+            });
+          }
+        }
+
+        // Sort by date (newest first)
+        reviews.sort((a, b) => {
+          const ta = new Date(a.createdAt || 0).getTime();
+          const tb = new Date(b.createdAt || 0).getTime();
+          return tb - ta;
+        });
+
+        setSellerReviews(reviews);
+      } catch (error) {
+        console.error('Error fetching seller reviews:', error);
+      }
+    };
+
+    fetchSellerData();
+    fetchSellerReviews();
+    setLoading(false);
+  }, [sellerUid, sellerUsername]);
+
+  const sellerItems = objects.filter(
+    obj => obj.username === sellerUsername || obj.ownerUid === sellerUid
+  );
+
+  const averageRating =
+    sellerReviews.length > 0
+      ? sellerReviews.reduce((sum, review) => sum + (Number(review.stars) || 0), 0) / sellerReviews.length
+      : 0;
+
+  return (
+    <View style={styles.homeContainerMobile}>
+      <View style={styles.homeContent}>
+        <SafeAreaView style={styles.container}>
+          <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+
+          {/* Header */}
+          <View style={styles.categoryHeader}>
+            <TouchableOpacity onPress={onBack} style={styles.backHeaderButton}>
+              <Text style={styles.backHeaderButtonText}>← Back</Text>
+            </TouchableOpacity>
+            <View style={styles.categoryHeaderContent}>
+              <Text style={styles.categoryHeaderEmoji}>👤</Text>
+              <View>
+                <Text style={styles.categoryHeaderTitle}>Seller Profile</Text>
+                <Text style={styles.categoryHeaderCount}>{sellerUsername}</Text>
+              </View>
+            </View>
+            <View style={styles.headerSpacer} />
+          </View>
+
+          <ScrollView
+            style={styles.pageContent}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.scrollContent}
+          >
+            {/* Seller Info Card */}
+            <View style={styles.sellerProfileCard}>
+              <View style={styles.sellerHeaderSection}>
+                <View style={styles.sellerAvatar}>
+                  <Text style={styles.sellerAvatarText}>👤</Text>
+                </View>
+                <View style={styles.sellerNameSection}>
+                  <Text style={styles.sellerName}>{sellerUsername}</Text>
+                  <View style={styles.sellerRatingRow}>
+                    <Text style={styles.sellerRating}>
+                      {sellerReviews.length === 0 ? '—' : `${averageRating.toFixed(1)} ★`}
+                    </Text>
+                    <Text style={styles.sellerReviewCount}>
+                      {sellerReviews.length === 0
+                        ? 'No reviews'
+                        : `${sellerReviews.length} review${sellerReviews.length === 1 ? '' : 's'}`}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* Contact Info */}
+              {sellerData && (
+                <View style={styles.sellerContactInfo}>
+                  {sellerData.phone && (
+                    <View style={styles.contactItem}>
+                      <Text style={styles.contactIcon}>📱</Text>
+                      <Text style={styles.contactText}>{sellerData.phone}</Text>
+                    </View>
+                  )}
+                  {sellerData.email && (
+                    <View style={styles.contactItem}>
+                      <Text style={styles.contactIcon}>✉️</Text>
+                      <Text style={styles.contactText} numberOfLines={1}>{sellerData.email}</Text>
+                    </View>
+                  )}
+                </View>
+              )}
+            </View>
+
+            {/* Items Section */}
+            <Text style={styles.profileSectionTitle}>Items posted ({sellerItems.length})</Text>
+            {sellerItems.length > 0 ? (
+              <View style={styles.sellerItemsGrid}>
+                {sellerItems.map(item => (
+                  <TouchableOpacity
+                    key={item.id}
+                    style={styles.sellerItemCard}
+                    onPress={() => onProductSelect(item)}
+                    activeOpacity={0.8}
+                  >
+                    <Image
+                      source={{ uri: item.imageUrl || item.image }}
+                      style={styles.sellerItemImage}
+                    />
+                    <View style={styles.sellerItemContent}>
+                      <Text style={styles.sellerItemName} numberOfLines={1}>{item.name}</Text>
+                      <Text style={styles.sellerItemPrice}>CA${parseFloat(item.pricePerDay).toFixed(2)}/day</Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            ) : (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyStateEmoji}>📭</Text>
+                <Text style={styles.emptyStateTitle}>No items posted</Text>
+              </View>
+            )}
+
+            {/* Reviews Section */}
+            <Text style={styles.profileSectionTitle}>Reviews ({sellerReviews.length})</Text>
+            {sellerReviews.length === 0 ? (
+              <View style={styles.profileEmptyReviews}>
+                <Text style={styles.profileEmptyEmoji}>💬</Text>
+                <Text style={styles.profileEmptyTitle}>No reviews yet</Text>
+                <Text style={styles.profileEmptyText}>
+                  Be the first to review this seller
+                </Text>
+              </View>
+            ) : (
+              sellerReviews.map((review, index) => (
+                <View key={index} style={styles.profileReviewCard}>
+                  <View style={styles.profileReviewHeader}>
+                    <Text style={styles.profileReviewName} numberOfLines={1}>
+                      {review.reviewerName || 'Member'}
+                    </Text>
+                    <Text style={styles.profileReviewDate}>
+                      {formatReviewDate(review.createdAt)}
+                    </Text>
+                  </View>
+                  <Text style={styles.profileReviewStars}>
+                    {'⭐'.repeat(Math.min(5, Math.max(0, Number(review.stars) || 0)))}
+                  </Text>
+                  <Text style={styles.profileReviewComment}>{review.comment}</Text>
+                </View>
+              ))
+            )}
+
+            <View style={styles.bottomSpacing} />
+          </ScrollView>
+        </SafeAreaView>
+      </View>
+      <BottomNav currentPage="sellerProfile" onNavigate={() => {}} />
     </View>
   );
 }
 
 // Category Page Component
-function CategoryPage({ categoryValue, onBack, objects, onNavigate, currentPage }) {
+function CategoryPage({ categoryValue, onBack, objects, onNavigate, currentPage, onProductSelect }) {
   const categoryOptions = [
     { emoji: '🔧', label: 'Tools', value: 'tools' },
     { emoji: '⚽', label: 'Sports', value: 'sports' },
@@ -577,9 +1324,7 @@ function CategoryPage({ categoryValue, onBack, objects, onNavigate, currentPage 
   const filteredObjects = objects.filter(obj => obj.category === categoryValue);
 
   return (
-    <View style={styles.homeContainer}>
-      <LeftSidebar currentPage={currentPage} onNavigate={onNavigate} />
-      
+    <View style={styles.homeContainerMobile}>
       <View style={styles.homeContent}>
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
@@ -603,9 +1348,13 @@ function CategoryPage({ categoryValue, onBack, objects, onNavigate, currentPage 
         <FlatList
           data={filteredObjects}
           renderItem={({ item }) => (
-            <View style={styles.objectCard}>
+            <TouchableOpacity 
+              style={styles.objectCard}
+              onPress={() => onProductSelect(item)}
+              activeOpacity={0.8}
+            >
               <Image
-                source={{ uri: item.image }}
+                source={{ uri: item.imageUrl || item.image }}
                 style={styles.objectCardImage}
               />
               <View style={styles.objectCardContent}>
@@ -615,7 +1364,7 @@ function CategoryPage({ categoryValue, onBack, objects, onNavigate, currentPage 
                   <Text style={styles.objectCardPrice}>CA${parseFloat(item.pricePerDay).toFixed(2)}/day</Text>
                 </View>
               </View>
-            </View>
+            </TouchableOpacity>
           )}
           keyExtractor={(item) => item.id}
           scrollEnabled={true}
@@ -630,6 +1379,46 @@ function CategoryPage({ categoryValue, onBack, objects, onNavigate, currentPage 
       )}
       </SafeAreaView>
       </View>
+      <BottomNav currentPage={currentPage} onNavigate={onNavigate} />
+    </View>
+  );
+}
+
+// Bottom Navigation Component
+function BottomNav({ currentPage, onNavigate }) {
+  return (
+    <View style={styles.bottomNavBar}>
+      <TouchableOpacity 
+        style={[styles.bottomNavItem, currentPage === 'home' && styles.bottomNavItemActive]}
+        onPress={() => onNavigate('home')}
+      >
+        <Text style={styles.bottomNavIcon}>🏠</Text>
+        <Text style={[styles.bottomNavLabel, currentPage === 'home' && styles.bottomNavLabelActive]}>Home</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity 
+        style={[styles.bottomNavItem, currentPage === 'myItems' && styles.bottomNavItemActive]}
+        onPress={() => onNavigate('myItems')}
+      >
+        <Text style={styles.bottomNavIcon}>📦</Text>
+        <Text style={[styles.bottomNavLabel, currentPage === 'myItems' && styles.bottomNavLabelActive]}>My Items</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity 
+        style={[styles.bottomNavItem, (currentPage === 'creation1' || currentPage === 'creation2') && styles.bottomNavItemActive]}
+        onPress={() => onNavigate('creation1')}
+      >
+        <Text style={styles.bottomNavIcon}>➕</Text>
+        <Text style={[styles.bottomNavLabel, (currentPage === 'creation1' || currentPage === 'creation2') && styles.bottomNavLabelActive]}>Add</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity 
+        style={[styles.bottomNavItem, currentPage === 'profile' && styles.bottomNavItemActive]}
+        onPress={() => onNavigate('profile')}
+      >
+        <Text style={styles.bottomNavIcon}>👤</Text>
+        <Text style={[styles.bottomNavLabel, currentPage === 'profile' && styles.bottomNavLabelActive]}>Profile</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -639,7 +1428,7 @@ function LeftSidebar({ currentPage, onNavigate }) {
   return (
     <View style={styles.leftSidebar}>
       <View style={styles.sidebarBrand}>
-        <Text style={styles.sidebarBrandText}>NL</Text>
+        <Text style={styles.sidebarBrandText}>LF</Text>
       </View>
       
       <View style={styles.sidebarNav}>
@@ -652,11 +1441,11 @@ function LeftSidebar({ currentPage, onNavigate }) {
         </TouchableOpacity>
 
         <TouchableOpacity 
-          style={[styles.sidebarNavItem, currentPage === 'search' && styles.sidebarNavItemActive]}
-          onPress={() => onNavigate('search')}
+          style={[styles.sidebarNavItem, currentPage === 'myItems' && styles.sidebarNavItemActive]}
+          onPress={() => onNavigate('myItems')}
         >
-          <Text style={styles.sidebarNavIcon}>🔍</Text>
-          <Text style={styles.sidebarNavLabel}>Search</Text>
+          <Text style={styles.sidebarNavIcon}>📦</Text>
+          <Text style={styles.sidebarNavLabel}>My Items</Text>
         </TouchableOpacity>
 
         <TouchableOpacity 
@@ -665,14 +1454,6 @@ function LeftSidebar({ currentPage, onNavigate }) {
         >
           <Text style={styles.sidebarNavIcon}>➕</Text>
           <Text style={styles.sidebarNavLabel}>Add Item</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity 
-          style={[styles.sidebarNavItem, currentPage === 'messages' && styles.sidebarNavItemActive]}
-          onPress={() => onNavigate('messages')}
-        >
-          <Text style={styles.sidebarNavIcon}>💬</Text>
-          <Text style={styles.sidebarNavLabel}>Messages</Text>
         </TouchableOpacity>
 
         <TouchableOpacity 
@@ -687,8 +1468,61 @@ function LeftSidebar({ currentPage, onNavigate }) {
   );
 }
 
+// My Items Page Component
+function MyItemsPage({ objects, username, onNavigate, currentPage, onProductSelect }) {
+  const userItems = objects.filter(obj => obj.username === username);
+
+  return (
+    <View style={styles.homeContainerMobile}>
+      <View style={styles.homeContent}>
+        <View style={styles.header}>
+          <View style={styles.headerContent}>
+            <Text style={styles.headerTitle}>My Items</Text>
+            <Text style={styles.headerSubtitle}>{userItems.length} posted</Text>
+          </View>
+        </View>
+
+        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+          {userItems.length > 0 ? (
+            <View style={styles.section}>
+              <View style={styles.objectsGridContainer}>
+                {userItems.map((item) => (
+                  <View key={item.id} style={styles.objectGridItem}>
+                    <TouchableOpacity 
+                      style={styles.objectCard}
+                      onPress={() => onProductSelect(item)}
+                      activeOpacity={0.8}
+                    >
+                      <Image
+                        source={{ uri: item.imageUrl }}
+                        style={styles.objectCardImage}
+                      />
+                      <View style={styles.objectCardContent}>
+                        <Text style={styles.objectCardName} numberOfLines={1}>{item.name}</Text>
+                        <Text style={styles.objectCardPrice}>CA${parseFloat(item.pricePerDay).toFixed(2)}/day</Text>
+                      </View>
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            </View>
+          ) : (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateEmoji}>📭</Text>
+              <Text style={styles.emptyStateTitle}>No items posted yet</Text>
+              <Text style={styles.emptyStateText}>Start sharing items to build your collection</Text>
+            </View>
+          )}
+          <View style={styles.bottomSpacing} />
+        </ScrollView>
+      </View>
+      <BottomNav currentPage={currentPage} onNavigate={onNavigate} />
+    </View>
+  );
+}
+
 // Home Page Component
-function HomePage({ onCreateObject, onCategorySelect, objects, onNavigate, currentPage }) {
+function HomePage({ onCreateObject, onCategorySelect, objects, onNavigate, currentPage, onProductSelect }) {
   const [searchQuery, setSearchQuery] = useState('');
   const { username, logout } = useContext(AuthContext);
 
@@ -730,12 +1564,10 @@ function HomePage({ onCreateObject, onCategorySelect, objects, onNavigate, curre
 
   return (
     <View style={styles.homeContainer}>
-      <LeftSidebar currentPage={currentPage} onNavigate={onNavigate} />
-      
       <View style={styles.homeContent}>
       <View style={styles.header}>
         <View style={styles.headerContent}>
-          <Text style={styles.headerTitle}>NeighborLend</Text>
+          <Text style={styles.headerTitle}>Lendify</Text>
           <Text style={styles.headerSubtitle}>Share with your community</Text>
         </View>
         <View style={styles.userSection}>
@@ -786,7 +1618,11 @@ function HomePage({ onCreateObject, onCategorySelect, objects, onNavigate, curre
             <View style={styles.objectsGridContainer}>
               {filteredObjects.map((item) => (
                 <View key={item.id} style={styles.objectGridItem}>
-                  <View style={styles.objectCard}>
+                  <TouchableOpacity 
+                    style={styles.objectCard}
+                    onPress={() => onProductSelect(item)}
+                    activeOpacity={0.8}
+                  >
                     <Image
                       source={{ uri: item.imageUrl }}
                       style={styles.objectCardImage}
@@ -795,7 +1631,7 @@ function HomePage({ onCreateObject, onCategorySelect, objects, onNavigate, curre
                       <Text style={styles.objectCardName} numberOfLines={1}>{item.name}</Text>
                       <Text style={styles.objectCardPrice}>CA${parseFloat(item.pricePerDay).toFixed(2)}/day</Text>
                     </View>
-                  </View>
+                  </TouchableOpacity>
                 </View>
               ))}
             </View>
@@ -821,6 +1657,7 @@ function HomePage({ onCreateObject, onCategorySelect, objects, onNavigate, curre
         <View style={styles.bottomSpacing} />
       </ScrollView>
       </View>
+      <BottomNav currentPage={currentPage} onNavigate={onNavigate} />
     </View>
   );
 }
@@ -829,7 +1666,10 @@ function HomePage({ onCreateObject, onCategorySelect, objects, onNavigate, curre
 function MainApp() {
   const [currentPage, setCurrentPage] = useState('home');
   const [selectedCategory, setSelectedCategory] = useState(null);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [selectedSeller, setSelectedSeller] = useState(null);
   const [objects, setObjects] = useState([]);
+  const { username, user } = useContext(AuthContext);
   const [objectData, setObjectData] = useState({
     name: '',
     category: '',
@@ -878,6 +1718,26 @@ function MainApp() {
   const handleBackToHome = () => {
     setCurrentPage('home');
     setSelectedCategory(null);
+  };
+
+  const handleProductSelect = (product) => {
+    setSelectedProduct(product);
+    setCurrentPage('productDetail');
+  };
+
+  const handleBackFromProductDetail = () => {
+    setSelectedProduct(null);
+    setCurrentPage('home');
+  };
+
+  const handleSellerSelect = (sellerUsername, sellerUid) => {
+    setSelectedSeller({ username: sellerUsername, uid: sellerUid });
+    setCurrentPage('sellerProfile');
+  };
+
+  const handleBackFromSellerProfile = () => {
+    setSelectedSeller(null);
+    setCurrentPage('home');
   };
 
   const handleSubmit = () => {
@@ -931,6 +1791,8 @@ function MainApp() {
             pricePerDay: objectData.pricePerDay.toString(),
             description: objectData.description.trim(),
             imageUrl: imageUrl, // Store Supabase image URL
+            username: username,
+            ownerUid: user?.uid || null,
             timestamp: new Date().toISOString(),
           };
           
@@ -1009,7 +1871,20 @@ function MainApp() {
           objects={objects}
           onNavigate={handleNavigation}
           currentPage={currentPage}
+          onProductSelect={handleProductSelect}
         />
+      )}
+      {currentPage === 'myItems' && (
+        <MyItemsPage 
+          objects={objects}
+          username={username}
+          onNavigate={handleNavigation}
+          currentPage={currentPage}
+          onProductSelect={handleProductSelect}
+        />
+      )}
+      {currentPage === 'profile' && (
+        <ProfilePage onNavigate={handleNavigation} currentPage={currentPage} />
       )}
       {currentPage === 'category' && (
         <CategoryPage
@@ -1018,6 +1893,24 @@ function MainApp() {
           objects={objects}
           onNavigate={handleNavigation}
           currentPage={currentPage}
+          onProductSelect={handleProductSelect}
+        />
+      )}
+      {currentPage === 'productDetail' && selectedProduct && (
+        <ProductDetailScreen
+          product={selectedProduct}
+          onBack={handleBackFromProductDetail}
+          username={objects.find(obj => obj.id === selectedProduct.id)?.username}
+          onSellerSelect={handleSellerSelect}
+        />
+      )}
+      {currentPage === 'sellerProfile' && selectedSeller && (
+        <SellerProfilePage
+          sellerUsername={selectedSeller.username}
+          sellerUid={selectedSeller.uid}
+          onBack={handleBackFromSellerProfile}
+          objects={objects}
+          onProductSelect={handleProductSelect}
         />
       )}
       {currentPage === 'creation1' && (
@@ -1081,6 +1974,9 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: 20,
+  },
+  scrollContentWithBottomNav: {
+    paddingBottom: 96,
   },
   listContent: {
     paddingBottom: 20,
@@ -1535,6 +2431,11 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
+  /** Clears fixed BottomNav (~72px) on phone so Post / Continue stay tappable */
+  buttonContainerAboveBottomNav: {
+    paddingBottom: 88,
+    marginBottom: 0,
+  },
   nextButton: {
     flex: 1,
     backgroundColor: colors.primary,
@@ -1721,8 +2622,55 @@ const styles = StyleSheet.create({
   },
 
   // Navigation Styles
+  homeContainerMobile: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  bottomNavBar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingTop: 10,
+    paddingBottom: 16,
+    paddingHorizontal: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 12,
+  },
+  bottomNavItem: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 6,
+    borderRadius: 10,
+  },
+  bottomNavItemActive: {
+    backgroundColor: 'rgba(46, 80, 144, 0.12)',
+  },
+  bottomNavIcon: {
+    fontSize: 20,
+    marginBottom: 2,
+  },
+  bottomNavLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.lightText,
+  },
+  bottomNavLabelActive: {
+    color: colors.primary,
+    fontWeight: '700',
+  },
   bottomSpacing: {
-    height: 20,
+    height: 96,
   },
   bottomNav: {
     flexDirection: 'row',
@@ -1859,5 +2807,499 @@ const styles = StyleSheet.create({
   categoryGridLabelSelected: {
     color: colors.primary,
     fontWeight: '700',
+  },
+
+  // Product Detail Styles
+  detailImageContainer: {
+    width: '100%',
+    height: 300,
+    marginBottom: 16,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  detailImage: {
+    width: '100%',
+    height: '100%',
+  },
+  detailCard: {
+    marginHorizontal: 16,
+    marginBottom: 20,
+    backgroundColor: colors.background,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: 'hidden',
+  },
+  detailHeader: {
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+  },
+  detailTitleSection: {
+    gap: 8,
+  },
+  detailTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: colors.text,
+  },
+  detailPrice: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  detailInfoGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  detailInfoItem: {
+    width: '50%',
+    paddingHorizontal: 4,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderRightWidth: 1,
+    borderColor: colors.border,
+  },
+  detailInfoLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.lightText,
+    marginBottom: 6,
+    textAlign: 'center',
+  },
+  detailInfoValue: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.text,
+    textAlign: 'center',
+  },
+  detailSection: {
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  detailSectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: 12,
+  },
+  detailDescription: {
+    fontSize: 15,
+    color: colors.text,
+    lineHeight: 22,
+  },
+  detailOwnerCard: {
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    backgroundColor: colors.lightBg,
+  },
+  ownerInfoContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  ownerAvatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  ownerAvatarText: {
+    fontSize: 28,
+  },
+  ownerDetails: {
+    flex: 1,
+  },
+  ownerLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.lightText,
+    marginBottom: 4,
+  },
+  ownerName: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  ownerArrow: {
+    fontSize: 18,
+    color: colors.secondary,
+    fontWeight: '700',
+  },
+  detailActionButton: {
+    marginHorizontal: 16,
+    marginVertical: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    backgroundColor: colors.primary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  detailActionButtonIcon: {
+    fontSize: 20,
+  },
+  detailActionButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  detailRateSellerButton: {
+    marginHorizontal: 16,
+    marginTop: 4,
+    marginBottom: 0,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    backgroundColor: colors.lightBg,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  detailRateSellerButtonDisabled: {
+    opacity: 0.55,
+    borderColor: colors.border,
+  },
+  detailRateSellerIcon: {
+    fontSize: 18,
+  },
+  detailRateSellerText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  reviewModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(44, 62, 80, 0.45)',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  reviewModalAvoid: {
+    width: '100%',
+  },
+  reviewModalCard: {
+    backgroundColor: colors.background,
+    borderRadius: 14,
+    padding: 22,
+    borderWidth: 1,
+    borderColor: colors.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  reviewModalTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: colors.text,
+    marginBottom: 4,
+  },
+  reviewModalSubtitle: {
+    fontSize: 14,
+    color: colors.lightText,
+    marginBottom: 16,
+  },
+  reviewStarsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 20,
+  },
+  reviewStarHit: {
+    padding: 6,
+  },
+  reviewStarEmoji: {
+    fontSize: 32,
+  },
+  reviewStarEmojiDim: {
+    opacity: 0.22,
+  },
+  reviewModalLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: 8,
+  },
+  reviewModalInput: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: colors.text,
+    minHeight: 100,
+    textAlignVertical: 'top',
+    backgroundColor: colors.lightBg,
+    marginBottom: 8,
+  },
+  reviewCommentCount: {
+    fontSize: 12,
+    color: colors.lightText,
+    textAlign: 'right',
+    marginBottom: 20,
+  },
+  reviewModalActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  reviewModalCancel: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 10,
+    backgroundColor: colors.lightBg,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    alignItems: 'center',
+  },
+  reviewModalCancelText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  reviewModalSubmit: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 10,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+  },
+  reviewModalSubmitDisabled: {
+    opacity: 0.7,
+  },
+  reviewModalSubmitText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  profileSummaryCard: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    padding: 18,
+    backgroundColor: colors.background,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  profileRatingRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  profileRatingStars: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: colors.primary,
+  },
+  profileRatingMeta: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.lightText,
+  },
+  profileEmail: {
+    fontSize: 14,
+    color: colors.text,
+  },
+  profileSectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.text,
+    marginHorizontal: 16,
+    marginTop: 24,
+    marginBottom: 12,
+  },
+  profileReviewsList: {
+    flex: 1,
+  },
+  profileReviewsListContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 96,
+  },
+  profileReviewCard: {
+    backgroundColor: colors.background,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 14,
+    marginBottom: 12,
+  },
+  profileReviewHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+    gap: 8,
+  },
+  profileReviewName: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  profileReviewDate: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.lightText,
+  },
+  profileReviewStars: {
+    fontSize: 14,
+    marginBottom: 8,
+  },
+  profileReviewComment: {
+    fontSize: 15,
+    color: colors.text,
+    lineHeight: 22,
+  },
+  profileEmptyReviews: {
+    marginHorizontal: 24,
+    marginTop: 24,
+    alignItems: 'center',
+  },
+  profileEmptyEmoji: {
+    fontSize: 40,
+    marginBottom: 8,
+  },
+  profileEmptyTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: 6,
+  },
+  profileEmptyText: {
+    fontSize: 14,
+    color: colors.lightText,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  // Seller Profile Styles
+  sellerProfileCard: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    marginBottom: 24,
+    backgroundColor: colors.background,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  sellerHeaderSection: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    marginBottom: 16,
+  },
+  sellerAvatar: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sellerAvatarText: {
+    fontSize: 32,
+  },
+  sellerNameSection: {
+    flex: 1,
+  },
+  sellerName: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: colors.text,
+    marginBottom: 6,
+  },
+  sellerRatingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  sellerRating: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  sellerReviewCount: {
+    fontSize: 14,
+    color: colors.lightText,
+    fontWeight: '600',
+  },
+  sellerContactInfo: {
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingTop: 12,
+    gap: 8,
+  },
+  contactItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  contactIcon: {
+    fontSize: 18,
+  },
+  contactText: {
+    fontSize: 14,
+    color: colors.text,
+    flex: 1,
+  },
+  sellerItemsGrid: {
+    marginHorizontal: 16,
+    marginBottom: 24,
+    gap: 12,
+  },
+  sellerItemCard: {
+    flexDirection: 'row',
+    backgroundColor: colors.background,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: 'hidden',
+  },
+  sellerItemImage: {
+    width: 100,
+    height: 100,
+  },
+  sellerItemContent: {
+    flex: 1,
+    padding: 12,
+    justifyContent: 'space-between',
+  },
+  sellerItemName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: 4,
+  },
+  sellerItemPrice: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.secondary,
   },
 });

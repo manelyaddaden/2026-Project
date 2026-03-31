@@ -28,10 +28,11 @@ const colors = {
 };
 
 export function AuthScreen() {
-  const [isLogin, setIsLogin] = useState(true);
+  const [isLogin, setIsLogin] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
   const [loading, setLoading] = useState(false);
 
   const { login, signUp } = useContext(AuthContext);
@@ -53,7 +54,7 @@ export function AuthScreen() {
 
   const handleSignUp = async () => {
     if (!email || !password || !username) {
-      Alert.alert('Error', 'Please fill in all fields');
+      Alert.alert('Error', 'Please fill in required fields');
       return;
     }
 
@@ -63,7 +64,7 @@ export function AuthScreen() {
     }
 
     setLoading(true);
-    const result = await signUp(email, password, username);
+    const result = await signUp(email, password, username, phoneNumber);
     setLoading(false);
 
     if (!result.success) {
@@ -76,6 +77,7 @@ export function AuthScreen() {
     setEmail('');
     setPassword('');
     setUsername('');
+    setPhoneNumber('');
   };
 
   return (
@@ -89,20 +91,40 @@ export function AuthScreen() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.headerContainer}>
-            <Text style={styles.appTitle}>Neighborlend</Text>
+          {/* Decorative Header */}
+          <View style={styles.decorativeHeader}>
+            <View style={styles.headerBlob1} />
+            <View style={styles.headerBlob2} />
+          </View>
+
+          {/* Logo and Title Section */}
+          <View style={styles.logoSection}>
+            <View style={styles.logoBadge}>
+              <Text style={styles.logoText}>🎁</Text>
+            </View>
+            <Text style={styles.appTitle}>Lendify</Text>
+            <Text style={styles.tagline}>Share. Borrow. Save.</Text>
+          </View>
+
+          {/* Subtitle with Icon */}
+          <View style={styles.subtitleContainer}>
+            <Text style={styles.subtitleIcon}>{isLogin ? '👋' : '🌟'}</Text>
             <Text style={styles.subtitle}>
-              {isLogin ? 'Welcome Back!' : 'Create Account'}
+              {isLogin ? 'Welcome Back!' : 'Join Our Community'}
             </Text>
           </View>
 
+          {/* Form Container */}
           <View style={styles.formContainer}>
             {!isLogin && (
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Username</Text>
+                <View style={styles.inputLabelContainer}>
+                  <Text style={styles.inputIcon}>👤</Text>
+                  <Text style={styles.label}>Username</Text>
+                </View>
                 <TextInput
                   style={styles.input}
-                  placeholder="Enter your username"
+                  placeholder="Choose a unique username"
                   placeholderTextColor={colors.lightText}
                   value={username}
                   onChangeText={setUsername}
@@ -112,10 +134,13 @@ export function AuthScreen() {
             )}
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Email</Text>
+              <View style={styles.inputLabelContainer}>
+                <Text style={styles.inputIcon}>✉️</Text>
+                <Text style={styles.label}>Email Address</Text>
+              </View>
               <TextInput
                 style={styles.input}
-                placeholder="Enter your email"
+                placeholder="your@email.com"
                 placeholderTextColor={colors.lightText}
                 value={email}
                 onChangeText={setEmail}
@@ -126,10 +151,13 @@ export function AuthScreen() {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Password</Text>
+              <View style={styles.inputLabelContainer}>
+                <Text style={styles.inputIcon}>🔑</Text>
+                <Text style={styles.label}>Password</Text>
+              </View>
               <TextInput
                 style={styles.input}
-                placeholder="Enter your password"
+                placeholder="••••••••"
                 placeholderTextColor={colors.lightText}
                 value={password}
                 onChangeText={setPassword}
@@ -138,21 +166,46 @@ export function AuthScreen() {
               />
               {!isLogin && (
                 <Text style={styles.helperText}>
-                  Password must be at least 6 characters
+                  ℹ️  Minimum 6 characters for security
                 </Text>
               )}
             </View>
 
+            {!isLogin && (
+              <View style={styles.inputGroup}>
+                <View style={styles.inputLabelContainer}>
+                  <Text style={styles.inputIcon}>📱</Text>
+                  <Text style={styles.label}>Phone Number (Optional)</Text>
+                </View>
+                <TextInput
+                  style={styles.input}
+                  placeholder="+1 (555) 123-4567"
+                  placeholderTextColor={colors.lightText}
+                  value={phoneNumber}
+                  onChangeText={setPhoneNumber}
+                  keyboardType="phone-pad"
+                  editable={!loading}
+                />
+                <Text style={styles.helperText}>
+                  ℹ️  Add your phone so buyers can contact you
+                </Text>
+              </View>
+            )}
+
+            {/* Primary Button */}
             <TouchableOpacity
               style={[styles.button, loading && styles.buttonDisabled]}
               onPress={isLogin ? handleLogin : handleSignUp}
               disabled={loading}
+              activeOpacity={0.85}
             >
+              <Text style={styles.buttonIcon}>{isLogin ? '→' : '✓'}</Text>
               <Text style={styles.buttonText}>
-                {loading ? (isLogin ? 'Logging in...' : 'Creating account...') : (isLogin ? 'Login' : 'Sign Up')}
+                {loading ? (isLogin ? 'Logging in...' : 'Creating account...') : (isLogin ? 'Login' : 'Create Account')}
               </Text>
             </TouchableOpacity>
 
+            {/* Mode Toggle */}
             <View style={styles.toggleContainer}>
               <Text style={styles.toggleText}>
                 {isLogin ? "Don't have an account? " : 'Already have an account? '}
@@ -168,12 +221,37 @@ export function AuthScreen() {
             </View>
           </View>
 
+          {/* Info Card */}
           <View style={styles.infoContainer}>
+            <Text style={styles.infoIcon}>{isLogin ? '🔐' : '🎯'}</Text>
             <Text style={styles.infoText}>
               {isLogin
-                ? 'Enter your email and password to access your account'
-                : 'Create a new account to get started with Neighborlend'}
+                ? 'Your account is secure and protected'
+                : 'Join thousands borrowing and sharing items'}
             </Text>
+          </View>
+
+          {/* Divider with or text */}
+          <View style={styles.dividerContainer}>
+            <View style={styles.divider} />
+            <Text style={styles.dividerText}>or</Text>
+            <View style={styles.divider} />
+          </View>
+
+          {/* Social/Features Info */}
+          <View style={styles.featuresContainer}>
+            <View style={styles.featureItem}>
+              <Text style={styles.featureIcon}>💚</Text>
+              <Text style={styles.featureText}>Community-driven</Text>
+            </View>
+            <View style={styles.featureItem}>
+              <Text style={styles.featureIcon}>🛡️</Text>
+              <Text style={styles.featureText}>Safe & Secure</Text>
+            </View>
+            <View style={styles.featureItem}>
+              <Text style={styles.featureIcon}>💰</Text>
+              <Text style={styles.featureText}>Save Money</Text>
+            </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -191,91 +269,236 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
-    paddingHorizontal: 20,
-    paddingVertical: 20,
+    paddingBottom: 30,
   },
-  headerContainer: {
+
+  // Decorative Header
+  decorativeHeader: {
+    height: 120,
+    position: 'relative',
+    marginBottom: 20,
+    overflow: 'hidden',
+  },
+  headerBlob1: {
+    position: 'absolute',
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    backgroundColor: colors.secondary,
+    opacity: 0.1,
+    top: -50,
+    right: -30,
+  },
+  headerBlob2: {
+    position: 'absolute',
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: colors.accent,
+    opacity: 0.08,
+    top: -40,
+    left: -40,
+  },
+
+  // Logo Section
+  logoSection: {
     alignItems: 'center',
-    marginTop: 40,
-    marginBottom: 40,
+    marginBottom: 20,
+    marginTop: 10,
+  },
+  logoBadge: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: colors.lightBg,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+    borderWidth: 2,
+    borderColor: colors.accent,
+  },
+  logoText: {
+    fontSize: 40,
   },
   appTitle: {
-    fontSize: 32,
-    fontWeight: 'bold',
+    fontSize: 40,
+    fontWeight: '800',
     color: colors.primary,
-    marginBottom: 10,
+    marginBottom: 4,
+  },
+  tagline: {
+    fontSize: 14,
+    color: colors.accent,
+    fontWeight: '600',
+    letterSpacing: 0.5,
+  },
+
+  // Subtitle with Icon
+  subtitleContainer: {
+    alignItems: 'center',
+    marginBottom: 30,
+    marginTop: 10,
+  },
+  subtitleIcon: {
+    fontSize: 32,
+    marginBottom: 8,
   },
   subtitle: {
-    fontSize: 16,
-    color: colors.lightText,
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.text,
   },
+
+  // Form Container
   formContainer: {
-    marginBottom: 30,
+    marginHorizontal: 20,
+    marginBottom: 24,
   },
   inputGroup: {
-    marginBottom: 20,
+    marginBottom: 18,
+  },
+  inputLabelContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  inputIcon: {
+    fontSize: 18,
+    marginRight: 8,
   },
   label: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '700',
     color: colors.text,
-    marginBottom: 8,
   },
   input: {
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: colors.border,
-    borderRadius: 8,
-    paddingHorizontal: 15,
-    paddingVertical: 12,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     fontSize: 16,
     color: colors.text,
     backgroundColor: colors.lightBg,
+    fontWeight: '500',
   },
   helperText: {
     fontSize: 12,
     color: colors.lightText,
-    marginTop: 5,
+    marginTop: 8,
+    fontWeight: '500',
   },
+
+  // Button Styles
   button: {
     backgroundColor: colors.primary,
-    borderRadius: 8,
-    paddingVertical: 14,
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
     alignItems: 'center',
-    marginTop: 10,
+    marginTop: 20,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 10,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 5,
   },
   buttonDisabled: {
-    opacity: 0.6,
+    opacity: 0.65,
+  },
+  buttonIcon: {
+    fontSize: 20,
+    fontWeight: '700',
   },
   buttonText: {
-    color: colors.background,
+    color: '#FFFFFF',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
+
+  // Toggle Container
   toggleContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 20,
+    marginTop: 18,
   },
   toggleText: {
     color: colors.text,
     fontSize: 14,
+    fontWeight: '500',
   },
   toggleLink: {
     color: colors.secondary,
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '700',
   },
+
+  // Info Container
   infoContainer: {
-    backgroundColor: colors.lightBg,
-    borderRadius: 8,
-    padding: 15,
-    marginTop: 20,
+    marginHorizontal: 20,
+    backgroundColor: 'rgba(74, 144, 226, 0.08)',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 24,
+    alignItems: 'center',
+    borderLeftWidth: 4,
+    borderLeftColor: colors.secondary,
+  },
+  infoIcon: {
+    fontSize: 28,
+    marginBottom: 10,
   },
   infoText: {
+    color: colors.text,
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: 'center',
+    fontWeight: '600',
+  },
+
+  // Divider
+  dividerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 20,
+    marginVertical: 20,
+  },
+  divider: {
+    flex: 1,
+    height: 1,
+    backgroundColor: colors.border,
+  },
+  dividerText: {
+    paddingHorizontal: 12,
     color: colors.lightText,
     fontSize: 13,
-    lineHeight: 20,
+    fontWeight: '600',
+  },
+
+  // Features Container
+  featuresContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginHorizontal: 20,
+    paddingBottom: 20,
+  },
+  featureItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  featureIcon: {
+    fontSize: 28,
+    marginBottom: 8,
+  },
+  featureText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.lightText,
     textAlign: 'center',
   },
 });

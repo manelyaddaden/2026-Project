@@ -9,24 +9,27 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [username, setUsername] = useState(null);
+  const [phoneNumber, setPhoneNumber] = useState(null);
 
   // Listen for auth state changes
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (authUser) => {
       if (authUser) {
         setUser(authUser);
-        // Fetch username from Firestore
+        // Fetch username and phone from Firestore
         try {
           const userDoc = await getDoc(doc(db, 'users', authUser.uid));
           if (userDoc.exists()) {
             setUsername(userDoc.data().username);
+            setPhoneNumber(userDoc.data().phoneNumber || null);
           }
         } catch (error) {
-          console.error('Error fetching username:', error);
+          console.error('Error fetching user data:', error);
         }
       } else {
         setUser(null);
         setUsername(null);
+        setPhoneNumber(null);
       }
       setLoading(false);
     });
@@ -35,21 +38,23 @@ export function AuthProvider({ children }) {
   }, []);
 
   // Sign up function
-  const signUp = async (email, password, username) => {
+  const signUp = async (email, password, username, phoneNumber) => {
     try {
       // Create user with email and password
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const uid = userCredential.user.uid;
 
-      // Store username in Firestore
+      // Store username and phone in Firestore
       await setDoc(doc(db, 'users', uid), {
         username: username,
         email: email,
+        phoneNumber: phoneNumber || '',
         createdAt: new Date().toISOString(),
       });
 
       setUser(userCredential.user);
       setUsername(username);
+      setPhoneNumber(phoneNumber || null);
       return { success: true };
     } catch (error) {
       return { 
@@ -100,6 +105,7 @@ export function AuthProvider({ children }) {
       value={{
         user,
         username,
+        phoneNumber,
         loading,
         signUp,
         login,
