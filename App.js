@@ -26,6 +26,8 @@ import { db } from './firebaseConfig';
 import { supabase } from './supabaseConfig';
 import { AuthProvider, AuthContext } from './AuthContext';
 import { AuthScreen } from './AuthScreen';
+import { AdminPanel } from './AdminPanel';
+import { ReportUserModal } from './ReportUserModal';
 
 // Color scheme - Modern, mature, professional
 const colors = {
@@ -220,7 +222,7 @@ function DateRangePicker({ label, startDate, endDate, onSelect, showConfirmButto
 }
 
 // Object Creation - Page 1: Basic Information
-function ObjectCreationPage1({ onNext, objectData, setObjectData, onNavigate, currentPage }) {
+function ObjectCreationPage1({ onNext, objectData, setObjectData, onNavigate, currentPage, onCancel }) {
   const { width } = useWindowDimensions();
   const isPhone = width < 768;
 
@@ -276,7 +278,7 @@ function ObjectCreationPage1({ onNext, objectData, setObjectData, onNavigate, cu
         
         {/* Header */}
         <View style={styles.pageHeader}>
-          <TouchableOpacity style={styles.closeButton} onPress={() => {}}>
+          <TouchableOpacity style={styles.closeButton} onPress={onCancel}>
             <Text style={styles.closeButtonText}>✕</Text>
           </TouchableOpacity>
         <View style={styles.headerContent}>
@@ -424,6 +426,11 @@ function ObjectCreationPage2({ onBack, onSubmit, objectData, setObjectData, onNa
   const { width } = useWindowDimensions();
   const isPhone = width < 768;
   const [imageUri, setImageUri] = useState(objectData.image);
+
+  // Sync imageUri with objectData.image to prevent state desync
+  useEffect(() => {
+    setImageUri(objectData.image);
+  }, [objectData.image]);
 
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -606,6 +613,8 @@ function ProductDetailScreen({ product, onBack, username, onSellerSelect }) {
   const [reviewComment, setReviewComment] = useState('');
   const [submittingReview, setSubmittingReview] = useState(false);
   const [myReview, setMyReview] = useState(null);
+  const [sellerPhoneNumber, setSellerPhoneNumber] = useState(null);
+  const [showReportModal, setShowReportModal] = useState(false);
 
   const categoryOptions = [
     { emoji: '🔧', label: 'Tools', value: 'tools' },
@@ -638,6 +647,28 @@ function ProductDetailScreen({ product, onBack, username, onSellerSelect }) {
     });
     return () => unsub();
   }, [product?.id, user?.uid]);
+
+  // Fetch seller phone number
+  useEffect(() => {
+    if (!product?.ownerUid && !product?.username) {
+      setSellerPhoneNumber(null);
+      return;
+    }
+    const fetchSellerPhone = async () => {
+      try {
+        if (product?.ownerUid) {
+          const userDoc = await getDoc(doc(db, 'users', product.ownerUid));
+          if (userDoc.exists()) {
+            setSellerPhoneNumber(userDoc.data().phoneNumber || null);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching seller phone:', error);
+        setSellerPhoneNumber(null);
+      }
+    };
+    fetchSellerPhone();
+  }, [product?.ownerUid, product?.username]);
 
   const openReviewModal = () => {
     if (!user) {
@@ -855,6 +886,10 @@ function ProductDetailScreen({ product, onBack, username, onSellerSelect }) {
                   <Text style={styles.detailInfoLabel}>Available Until</Text>
                   <Text style={styles.detailInfoValue}>{product.endDate}</Text>
                 </View>
+                <View style={styles.detailInfoItem}>
+                  <Text style={styles.detailInfoLabel}>Borough</Text>
+                  <Text style={styles.detailInfoValue}>{product.borough || 'N/A'}</Text>
+                </View>
               </View>
 
               {/* Description */}
@@ -895,15 +930,59 @@ function ProductDetailScreen({ product, onBack, username, onSellerSelect }) {
                 </Text>
               </TouchableOpacity>
 
-              {/* Action Button */}
-              <TouchableOpacity style={styles.detailActionButton}>
-                <Text style={styles.detailActionButtonIcon}>💬</Text>
+              {/* Contact Button */}
+              <TouchableOpacity 
+                style={styles.detailActionButton}
+                onPress={() => {
+                  if (sellerPhoneNumber) {
+                    Alert.alert(
+                      'Contact Lender',
+                      `Phone: ${sellerPhoneNumber}\n\nYou can call or send a message to arrange the rental.`,
+                      [{ text: 'Close', style: 'default' }]
+                    );
+                  } else {
+                    Alert.alert(
+                      'Contact Info Unavailable',
+                      'This lender has not provided a phone number yet.',
+                      [{ text: 'OK', style: 'default' }]
+                    );
+                  }
+                }}
+              >
+                <Text style={styles.detailActionButtonIcon}>📱</Text>
                 <Text style={styles.detailActionButtonText}>Contact Lender</Text>
               </TouchableOpacity>
+
+              {/* Report User Button */}
+              {!iAmSeller && (
+                <TouchableOpacity 
+                  style={[styles.detailActionButton, styles.detailReportButton]}
+                  onPress={() => setShowReportModal(true)}
+                >
+                  <Text style={styles.detailActionButtonIcon}>🚩</Text>
+                  <Text style={styles.detailActionButtonText}>Report User</Text>
+                </TouchableOpacity>
+              )}
             </View>
 
             <View style={styles.spacer} />
           </ScrollView>
+
+          {/* Report User Modal */}
+          <ReportUserModal
+            visible={showReportModal}
+            reportedUserId={product.ownerUid || ''}
+            reportedUserEmail={product.ownerEmail || ''}
+            reportedUserName={product.username || username || 'Unknown User'}
+            onClose={() => setShowReportModal(false)}
+            onNavigateHome={() => {
+              setShowReportModal(false);
+              onBack();
+            }}
+            onSuccess={() => {
+              // Additional success handling if needed
+            }}
+          />
         </SafeAreaView>
       </View>
     </View>
@@ -1091,7 +1170,7 @@ function ProfilePage({ onNavigate, currentPage }) {
 }
 
 // Seller Profile Page Component
-function SellerProfilePage({ sellerUsername, sellerUid, onBack, objects, onProductSelect }) {
+function SellerProfilePage({ sellerUsername, sellerUid, onBack, objects, onProductSelect, onNavigate }) {
   const [sellerData, setSellerData] = useState(null);
   const [sellerReviews, setSellerReviews] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1302,7 +1381,7 @@ function SellerProfilePage({ sellerUsername, sellerUid, onBack, objects, onProdu
           </ScrollView>
         </SafeAreaView>
       </View>
-      <BottomNav currentPage="sellerProfile" onNavigate={() => {}} />
+      <BottomNav currentPage="sellerProfile" onNavigate={onNavigate} />
     </View>
   );
 }
@@ -1384,6 +1463,129 @@ function CategoryPage({ categoryValue, onBack, objects, onNavigate, currentPage,
   );
 }
 
+// Safety Guidelines Page
+function SafetyGuidelinesPage({ onNavigate, currentPage }) {
+  const { width } = useWindowDimensions();
+  const isPhone = width < 768;
+
+  const safetyTips = [
+    {
+      number: '1',
+      title: 'Meet in Safe, Public Locations',
+      icon: '📍',
+      description: 'Always choose well-lit, busy public places for exchanges. Avoid meeting at private residences, especially for first-time interactions.',
+      highlight: 'In Montreal, the SPVM provides designated meeting points equipped with surveillance cameras. Check: https://spvm.qc.ca/en/Fiches/Details/Safe-Trading-Zones'
+    },
+    {
+      number: '2',
+      title: 'Bring Someone With You',
+      icon: '👥',
+      description: 'If possible, go with a friend or family member, especially when meeting someone for the first time.'
+    },
+    {
+      number: '3',
+      title: 'Inform Someone You Trust',
+      icon: '📱',
+      description: 'Let a trusted person know where you are going, who you are meeting, and what time you expect to return.'
+    },
+    {
+      number: '4',
+      title: 'Check the Item Carefully',
+      icon: '🔍',
+      description: 'Before completing the exchange, inspect the item thoroughly to ensure it matches the description and is in acceptable condition.'
+    },
+    {
+      number: '5',
+      title: 'Avoid Sharing Personal Information',
+      icon: '🔐',
+      description: 'Do not share sensitive personal information such as your home address, financial details, or identification documents.'
+    },
+    {
+      number: '6',
+      title: 'Trust Your Instincts',
+      icon: '⚠️',
+      description: 'If something feels off or unsafe, cancel the meeting immediately. Your safety is more important than any transaction.'
+    },
+    {
+      number: '7',
+      title: 'Report Suspicious Behavior',
+      icon: '🚨',
+      description: 'If you encounter inappropriate or suspicious activity, report the user through the app. Lendify may take action, including account suspension.'
+    },
+  ];
+
+  return (
+    <View style={isPhone ? styles.homeContainerMobile : styles.homeContainer}>
+      {!isPhone && <LeftSidebar currentPage={currentPage} onNavigate={onNavigate} />}
+      
+      <View style={styles.homeContent}>
+        <SafeAreaView style={styles.container}>
+          <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+          
+          {/* Header */}
+          <View style={styles.safetyHeader}>
+            <View style={styles.safetyHeaderContent}>
+              <Text style={styles.safetyHeaderIcon}>🛡️</Text>
+              <View style={styles.safetyHeaderText}>
+                <Text style={styles.safetyTitle}>Safety Guidelines</Text>
+                <Text style={styles.safetySubtitle}>Your safety is our priority</Text>
+              </View>
+            </View>
+          </View>
+
+          <ScrollView
+            style={styles.safetyContent}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={isPhone ? styles.scrollContentWithBottomNav : styles.scrollContent}
+          >
+            {/* Intro Message */}
+            <View style={styles.safetyIntro}>
+              <Text style={styles.safetyIntroText}>
+                While Lendify is not involved in transactions between users, we strongly encourage you to follow these safety recommendations when meeting others and exchanging items.
+              </Text>
+            </View>
+
+            {/* Safety Tips List */}
+            <View style={styles.safetyTipsContainer}>
+              {safetyTips.map((tip, index) => (
+                <View key={index} style={styles.safetyTipCard}>
+                  <View style={styles.safetyTipHeader}>
+                    <View style={styles.safetyTipIconContainer}>
+                      <Text style={styles.safetyTipCircleNumber}>{tip.number}</Text>
+                      <Text style={styles.safetyTipIcon}>{tip.icon}</Text>
+                    </View>
+                    <Text style={styles.safetyTipTitle}>{tip.title}</Text>
+                  </View>
+                  <Text style={styles.safetyTipDescription}>{tip.description}</Text>
+                  {tip.highlight && (
+                    <View style={styles.safetyHighlight}>
+                      <Text style={styles.safetyHighlightText}>{tip.highlight}</Text>
+                    </View>
+                  )}
+                </View>
+              ))}
+            </View>
+
+            {/* Bottom CTA */}
+            <View style={styles.safetyCtaContainer}>
+              <View style={styles.safetyCtaBox}>
+                <Text style={styles.safetyCtaIcon}>💚</Text>
+                <Text style={styles.safetyCtaTitle}>Stay Safe Out There!</Text>
+                <Text style={styles.safetyCtaText}>
+                  Enjoy sharing with your neighbors with confidence. If you have any safety concerns, don't hesitate to reach out.
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.spacer} />
+          </ScrollView>
+        </SafeAreaView>
+      </View>
+      {isPhone && <BottomNav currentPage={currentPage} onNavigate={onNavigate} />}
+    </View>
+  );
+}
+
 // Bottom Navigation Component
 function BottomNav({ currentPage, onNavigate }) {
   return (
@@ -1418,6 +1620,14 @@ function BottomNav({ currentPage, onNavigate }) {
       >
         <Text style={styles.bottomNavIcon}>👤</Text>
         <Text style={[styles.bottomNavLabel, currentPage === 'profile' && styles.bottomNavLabelActive]}>Profile</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity 
+        style={[styles.bottomNavItem, currentPage === 'safety' && styles.bottomNavItemActive]}
+        onPress={() => onNavigate('safety')}
+      >
+        <Text style={styles.bottomNavIcon}>🛡️</Text>
+        <Text style={[styles.bottomNavLabel, currentPage === 'safety' && styles.bottomNavLabelActive]}>Safety</Text>
       </TouchableOpacity>
     </View>
   );
@@ -1469,7 +1679,7 @@ function LeftSidebar({ currentPage, onNavigate }) {
 }
 
 // My Items Page Component
-function MyItemsPage({ objects, username, onNavigate, currentPage, onProductSelect }) {
+function MyItemsPage({ objects, username, onNavigate, currentPage, onProductSelect, onDeleteItem }) {
   const userItems = objects.filter(obj => obj.username === username);
 
   return (
@@ -1488,20 +1698,29 @@ function MyItemsPage({ objects, username, onNavigate, currentPage, onProductSele
               <View style={styles.objectsGridContainer}>
                 {userItems.map((item) => (
                   <View key={item.id} style={styles.objectGridItem}>
-                    <TouchableOpacity 
-                      style={styles.objectCard}
-                      onPress={() => onProductSelect(item)}
-                      activeOpacity={0.8}
-                    >
-                      <Image
-                        source={{ uri: item.imageUrl }}
-                        style={styles.objectCardImage}
-                      />
-                      <View style={styles.objectCardContent}>
-                        <Text style={styles.objectCardName} numberOfLines={1}>{item.name}</Text>
-                        <Text style={styles.objectCardPrice}>CA${parseFloat(item.pricePerDay).toFixed(2)}/day</Text>
-                      </View>
-                    </TouchableOpacity>
+                    <View style={{ position: 'relative' }}>
+                      <TouchableOpacity 
+                        style={styles.objectCard}
+                        onPress={() => onProductSelect(item)}
+                        activeOpacity={0.8}
+                      >
+                        <Image
+                          source={{ uri: item.imageUrl }}
+                          style={styles.objectCardImage}
+                        />
+                        <View style={styles.objectCardContent}>
+                          <Text style={styles.objectCardName} numberOfLines={1}>{item.name}</Text>
+                          <Text style={styles.objectCardPrice}>CA${parseFloat(item.pricePerDay).toFixed(2)}/day</Text>
+                        </View>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.deleteButton}
+                        onPress={() => onDeleteItem(item.id)}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={styles.deleteButtonText}>X</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 ))}
               </View>
@@ -1522,9 +1741,11 @@ function MyItemsPage({ objects, username, onNavigate, currentPage, onProductSele
 }
 
 // Home Page Component
-function HomePage({ onCreateObject, onCategorySelect, objects, onNavigate, currentPage, onProductSelect }) {
+function HomePage({ onCreateObject, onCategorySelect, objects, onNavigate, currentPage, onProductSelect, selectedBorough, onBoroughSelect }) {
   const [searchQuery, setSearchQuery] = useState('');
-  const { username, logout } = useContext(AuthContext);
+  const { username, logout, borough } = useContext(AuthContext);
+  const { width } = useWindowDimensions();
+  const isDesktop = width >= 768;
 
   const handleLogout = async () => {
     Alert.alert(
@@ -1557,10 +1778,35 @@ function HomePage({ onCreateObject, onCategorySelect, objects, onNavigate, curre
     { emoji: '👕', label: 'Clothing', value: 'clothing' },
   ];
 
-  const filteredObjects = objects.filter(obj =>
-    obj.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    obj.description.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const MONTREAL_BOROUGHS = [
+    'All Boroughs',
+    'Ahuntsic–Cartierville',
+    'Anjou',
+    'Côte-des-Neiges–Notre-Dame-de-Grâce',
+    'Lachine',
+    'LaSalle',
+    'Le Plateau-Mont-Royal',
+    'Le Sud-Ouest',
+    'L\'Île-Bizard–Sainte-Geneviève',
+    'Mercier–Hochelaga-Maisonneuve',
+    'Montréal-Nord',
+    'Outremont',
+    'Pierrefonds–Roxboro',
+    'Rivière-des-Prairies–Pointe-aux-Trembles',
+    'Rosemont–La Petite-Patrie',
+    'Saint-Laurent',
+    'Saint-Léonard',
+    'Verdun',
+    'Ville-Marie',
+    'Villeray–Saint-Michel–Parc-Extension',
+  ];
+
+  const filteredObjects = objects.filter(obj => {
+    const matchesSearch = obj.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          obj.description.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesBorough = !selectedBorough || selectedBorough === 'All Boroughs' || obj.borough === selectedBorough;
+    return matchesSearch && matchesBorough;
+  });
 
   return (
     <View style={styles.homeContainer}>
@@ -1594,10 +1840,48 @@ function HomePage({ onCreateObject, onCategorySelect, objects, onNavigate, curre
           />
         </View>
 
+        {/* Borough Filter with Scroll Arrows */}
+        <View style={styles.boroughFilterContainer}>
+          <Text style={styles.boroughFilterLabel}>📍 Filter by Borough:</Text>
+          <View style={styles.boroughScrollWrapper}>
+            <Text style={styles.boroughScrollArrow}>◀</Text>
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={true}
+              scrollIndicatorInsets={{ bottom: -10 }}
+              contentContainerStyle={styles.boroughScrollContent}
+            >
+              {MONTREAL_BOROUGHS.map((b) => (
+                <TouchableOpacity
+                  key={b}
+                  style={[
+                    styles.boroughFilterButton,
+                    (selectedBorough === b || (selectedBorough === null && b === 'All Boroughs')) && styles.boroughFilterButtonActive
+                  ]}
+                  onPress={() => onBoroughSelect?.(b === 'All Boroughs' ? null : b)}
+                >
+                  <Text style={[
+                    styles.boroughFilterButtonText,
+                    (selectedBorough === b || (selectedBorough === null && b === 'All Boroughs')) && styles.boroughFilterButtonTextActive
+                  ]}>
+                    {b}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <Text style={styles.boroughScrollArrow}>▶</Text>
+          </View>
+        </View>
+
         {/* Categories Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Browse Categories</Text>
-          <View style={styles.categoriesGrid}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.categoriesGrid}
+            contentContainerStyle={styles.categoriesGridContent}
+          >
             {categoryOptions.map((category) => (
               <TouchableOpacity
                 key={category.value}
@@ -1608,7 +1892,7 @@ function HomePage({ onCreateObject, onCategorySelect, objects, onNavigate, curre
                 <Text style={styles.categoryCardName}>{category.label}</Text>
               </TouchableOpacity>
             ))}
-          </View>
+          </ScrollView>
         </View>
 
         {/* Available Items Section */}
@@ -1617,7 +1901,7 @@ function HomePage({ onCreateObject, onCategorySelect, objects, onNavigate, curre
             <Text style={styles.sectionTitle}>Available Items ({filteredObjects.length})</Text>
             <View style={styles.objectsGridContainer}>
               {filteredObjects.map((item) => (
-                <View key={item.id} style={styles.objectGridItem}>
+                <View key={item.id} style={[styles.objectGridItem, isDesktop && styles.objectGridItemDesktop]}>
                   <TouchableOpacity 
                     style={styles.objectCard}
                     onPress={() => onProductSelect(item)}
@@ -1669,7 +1953,8 @@ function MainApp() {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [selectedSeller, setSelectedSeller] = useState(null);
   const [objects, setObjects] = useState([]);
-  const { username, user } = useContext(AuthContext);
+  const [selectedBorough, setSelectedBorough] = useState(null);
+  const { username, user, borough } = useContext(AuthContext);
   const [objectData, setObjectData] = useState({
     name: '',
     category: '',
@@ -1740,6 +2025,50 @@ function MainApp() {
     setCurrentPage('home');
   };
 
+  const handleCancelCreation = () => {
+    // Reset creation form and return to home
+    setObjectData({
+      name: '',
+      category: '',
+      condition: '',
+      startDate: new Date().toISOString().split('T')[0],
+      endDate: new Date(new Date().getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      pricePerDay: '',
+      description: '',
+      image: null,
+    });
+    setCurrentPage('home');
+  };
+
+  const handleDeleteItem = (itemId) => {
+    console.log('Delete clicked for item:', itemId);
+    Alert.alert(
+      'Delete Item',
+      'Are you sure you want to delete this item? This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            console.log('User confirmed delete for:', itemId);
+            try {
+              const itemRef = ref(realtimeDb, `objects/${itemId}`);
+              set(itemRef, null).then(() => {
+                console.log('Item deleted from Firebase');
+                setObjects(objects.filter(obj => obj.id !== itemId));
+                Alert.alert('Success', 'Item deleted successfully');
+              });
+            } catch (error) {
+              console.error('Error deleting item:', error);
+              Alert.alert('Error', 'Failed to delete item: ' + error.message);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const handleSubmit = () => {
     try {
       // Validate all required data before saving
@@ -1793,6 +2122,7 @@ function MainApp() {
             imageUrl: imageUrl, // Store Supabase image URL
             username: username,
             ownerUid: user?.uid || null,
+            borough: borough || '',
             timestamp: new Date().toISOString(),
           };
           
@@ -1862,6 +2192,10 @@ function MainApp() {
     }
   };
 
+  const handleBoroughSelect = (selectedB) => {
+    setSelectedBorough(selectedB);
+  };
+
   return (
     <>
       {currentPage === 'home' && (
@@ -1872,6 +2206,8 @@ function MainApp() {
           onNavigate={handleNavigation}
           currentPage={currentPage}
           onProductSelect={handleProductSelect}
+          selectedBorough={selectedBorough}
+          onBoroughSelect={handleBoroughSelect}
         />
       )}
       {currentPage === 'myItems' && (
@@ -1881,6 +2217,7 @@ function MainApp() {
           onNavigate={handleNavigation}
           currentPage={currentPage}
           onProductSelect={handleProductSelect}
+          onDeleteItem={handleDeleteItem}
         />
       )}
       {currentPage === 'profile' && (
@@ -1911,6 +2248,7 @@ function MainApp() {
           onBack={handleBackFromSellerProfile}
           objects={objects}
           onProductSelect={handleProductSelect}
+          onNavigate={handleNavigation}
         />
       )}
       {currentPage === 'creation1' && (
@@ -1920,6 +2258,7 @@ function MainApp() {
           setObjectData={setObjectData}
           onNavigate={handleNavigation}
           currentPage={currentPage}
+          onCancel={handleCancelCreation}
         />
       )}
       {currentPage === 'creation2' && (
@@ -1932,13 +2271,21 @@ function MainApp() {
           currentPage={currentPage}
         />
       )}
+      {currentPage === 'safety' && (
+        <SafetyGuidelinesPage
+          onNavigate={handleNavigation}
+          currentPage={currentPage}
+        />
+      )}
     </>
   );
 }
 
 // Main App wrapper with authentication
 function AppContent() {
-  const { user, loading, logout } = useContext(AuthContext);
+  const { user, loading, logout, isAdmin } = useContext(AuthContext);
+
+  console.log('AppContent - user:', user?.email || 'null', 'loading:', loading, 'isAdmin:', isAdmin);
 
   if (loading) {
     return (
@@ -1950,6 +2297,10 @@ function AppContent() {
 
   if (!user) {
     return <AuthScreen />;
+  }
+
+  if (isAdmin) {
+    return <AdminPanel />;
   }
 
   return <MainApp />;
@@ -1968,6 +2319,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+    justifyContent: 'flex-start',
   },
   scrollView: {
     flex: 1,
@@ -1976,7 +2328,7 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   scrollContentWithBottomNav: {
-    paddingBottom: 96,
+    paddingBottom: 120,
   },
   listContent: {
     paddingBottom: 20,
@@ -2123,6 +2475,7 @@ const styles = StyleSheet.create({
   // Page Content
   pageContent: {
     flex: 1,
+    zIndex: 1,
   },
 
   // Input Styles
@@ -2433,7 +2786,7 @@ const styles = StyleSheet.create({
   },
   /** Clears fixed BottomNav (~72px) on phone so Post / Continue stay tappable */
   buttonContainerAboveBottomNav: {
-    paddingBottom: 88,
+    paddingBottom: 100,
     marginBottom: 0,
   },
   nextButton: {
@@ -2512,6 +2865,54 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
 
+  // Borough Filter Styles
+  boroughFilterContainer: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+  },
+  boroughFilterLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: 10,
+  },
+  boroughScrollContent: {
+    paddingRight: 16,
+  },
+  boroughFilterButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: colors.lightBg,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    marginRight: 8,
+  },
+  boroughFilterButtonActive: {
+    backgroundColor: colors.accent,
+    borderColor: colors.accent,
+  },
+  boroughFilterButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  boroughFilterButtonTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  boroughScrollWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  boroughScrollArrow: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.primary,
+    paddingHorizontal: 6,
+  },
+
   section: {
     marginBottom: 24,
   },
@@ -2526,28 +2927,39 @@ const styles = StyleSheet.create({
   // Category Styles
   categoriesGrid: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     paddingHorizontal: 8,
+    paddingVertical: 8,
   },
   categoryCard: {
-    width: '31%',
+    width: 182,
+    height: 70,
     backgroundColor: colors.background,
-    margin: '1%',
-    padding: 16,
+    marginRight: 8,
+    padding: 6,
     borderRadius: 10,
     alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 1.5,
     borderColor: colors.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 2,
   },
   categoryCardEmoji: {
-    fontSize: 32,
-    marginBottom: 8,
+    fontSize: 22,
+    marginBottom: 2,
   },
   categoryCardName: {
-    fontSize: 12,
+    fontSize: 10,
     color: colors.text,
     fontWeight: '600',
     textAlign: 'center',
+    lineHeight: 12,
+  },
+  categoriesGridContent: {
+    paddingRight: 8,
   },
 
   // Object Grid Styles
@@ -2559,11 +2971,14 @@ const styles = StyleSheet.create({
   objectGridItem: {
     width: '48%',
     margin: '1%',
+    marginBottom: 16,
+  },
+  objectGridItemDesktop: {
+    width: '31%',
   },
   objectCard: {
     backgroundColor: colors.background,
     borderRadius: 10,
-    overflow: 'hidden',
     borderWidth: 1,
     borderColor: colors.border,
   },
@@ -2571,6 +2986,7 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 100,
     backgroundColor: colors.lightBg,
+    resizeMode: 'contain',
   },
   objectCardContent: {
     padding: 12,
@@ -2595,6 +3011,24 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: colors.primary,
+  },
+  deleteButton: {
+    position: 'absolute',
+    top: 5,
+    right: 5,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#E74C3C',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 5,
+    zIndex: 10,
+  },
+  deleteButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.background,
   },
 
   // Empty State
@@ -2625,6 +3059,7 @@ const styles = StyleSheet.create({
   homeContainerMobile: {
     flex: 1,
     backgroundColor: colors.background,
+    paddingBottom: 72,
   },
   bottomNavBar: {
     position: 'absolute',
@@ -2645,6 +3080,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 8,
     elevation: 12,
+    zIndex: 100,
   },
   bottomNavItem: {
     flex: 1,
@@ -2717,6 +3153,7 @@ const styles = StyleSheet.create({
   homeContent: {
     flex: 1,
     flexDirection: 'column',
+    position: 'relative',
   },
   leftSidebar: {
     width: 80,
@@ -2780,7 +3217,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   categoryGridItem: {
-    width: '23%',
+    width: '20%',
     aspectRatio: 1,
     borderRadius: 10,
     backgroundColor: colors.lightBg,
@@ -2788,7 +3225,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
   },
   categoryGridItemSelected: {
     backgroundColor: 'rgba(46, 80, 144, 0.1)',
@@ -2796,10 +3233,10 @@ const styles = StyleSheet.create({
     borderWidth: 2,
   },
   categoryGridEmoji: {
-    fontSize: 24,
+    fontSize: 18,
   },
   categoryGridLabel: {
-    fontSize: 11,
+    fontSize: 8,
     fontWeight: '600',
     color: colors.text,
     textAlign: 'center',
@@ -2820,6 +3257,7 @@ const styles = StyleSheet.create({
   detailImage: {
     width: '100%',
     height: '100%',
+    resizeMode: 'contain',
   },
   detailCard: {
     marginHorizontal: 16,
@@ -2960,6 +3398,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: '#fff',
+  },
+  detailReportButton: {
+    backgroundColor: colors.error,
+    borderColor: colors.error,
+    shadowColor: colors.error,
   },
   detailRateSellerButton: {
     marginHorizontal: 16,
@@ -3301,5 +3744,165 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: colors.secondary,
+  },
+  // Safety Guidelines Styles
+  safetyHeader: {
+    backgroundColor: colors.primary,
+    paddingTop: 20,
+    paddingBottom: 24,
+    paddingHorizontal: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  safetyHeaderContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  safetyHeaderIcon: {
+    fontSize: 40,
+  },
+  safetyHeaderText: {
+    flex: 1,
+  },
+  safetyTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  safetySubtitle: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.85)',
+    marginTop: 4,
+    fontWeight: '500',
+  },
+  safetyContent: {
+    flex: 1,
+  },
+  safetyIntro: {
+    marginHorizontal: 16,
+    marginTop: 24,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    backgroundColor: colors.lightBg,
+    borderRadius: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.accent,
+  },
+  safetyIntroText: {
+    fontSize: 15,
+    color: colors.text,
+    lineHeight: 24,
+    fontWeight: '500',
+  },
+  safetyTipsContainer: {
+    marginHorizontal: 16,
+    marginTop: 24,
+    marginBottom: 24,
+    gap: 14,
+  },
+  safetyTipCard: {
+    backgroundColor: colors.background,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  safetyTipHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 12,
+  },
+  safetyTipIconContainer: {
+    position: 'relative',
+    width: 48,
+    height: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  safetyTipCircleNumber: {
+    position: 'absolute',
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: colors.primary,
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'center',
+    textAlignVertical: 'center',
+    top: 0,
+    right: 0,
+    zIndex: 10,
+  },
+  safetyTipIcon: {
+    fontSize: 32,
+  },
+  safetyTipTitle: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  safetyTipDescription: {
+    fontSize: 14,
+    color: colors.text,
+    lineHeight: 22,
+    marginBottom: 12,
+  },
+  safetyHighlight: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: 'rgba(26, 188, 156, 0.08)',
+    borderRadius: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.accent,
+  },
+  safetyHighlightText: {
+    fontSize: 13,
+    color: colors.text,
+    lineHeight: 20,
+    fontWeight: '500',
+  },
+  safetyCtaContainer: {
+    marginHorizontal: 16,
+    marginBottom: 40,
+  },
+  safetyCtaBox: {
+    backgroundColor: colors.accent,
+    borderRadius: 12,
+    padding: 24,
+    alignItems: 'center',
+    shadowColor: colors.accent,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  safetyCtaIcon: {
+    fontSize: 48,
+    marginBottom: 12,
+  },
+  safetyCtaTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: colors.text,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  safetyCtaText: {
+    fontSize: 14,
+    color: colors.text,
+    lineHeight: 22,
+    textAlign: 'center',
   },
 });

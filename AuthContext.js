@@ -10,27 +10,63 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [username, setUsername] = useState(null);
   const [phoneNumber, setPhoneNumber] = useState(null);
+  const [borough, setBorough] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   // Listen for auth state changes
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (authUser) => {
+      console.log('Auth state changed:', authUser?.email || 'No user');
       if (authUser) {
+        console.log('User logged in:', authUser.email);
         setUser(authUser);
-        // Fetch username and phone from Firestore
+        // Check if admin
+        if (authUser.email === 'adminpanel@gmail.com') {
+          console.log('Setting admin user');
+          setIsAdmin(true);
+        } else {
+          setIsAdmin(false);
+        }
+        // Fetch username, phone, and borough from Firestore
         try {
           const userDoc = await getDoc(doc(db, 'users', authUser.uid));
           if (userDoc.exists()) {
+            console.log('User data found in Firestore');
             setUsername(userDoc.data().username);
             setPhoneNumber(userDoc.data().phoneNumber || null);
+            setBorough(userDoc.data().borough || null);
+          } else {
+            console.log('User data not found in Firestore');
+            // For admin, create a basic record if it doesn't exist
+            if (authUser.email === 'adminpanel@gmail.com') {
+              console.log('Creating admin user record in Firestore');
+              try {
+                await setDoc(doc(db, 'users', authUser.uid), {
+                  username: 'Admin',
+                  email: authUser.email,
+                  phoneNumber: '',
+                  borough: '',
+                  createdAt: new Date().toISOString(),
+                  isAdmin: true,
+                });
+                setUsername('Admin');
+              } catch (createError) {
+                console.error('Error creating admin user record:', createError);
+              }
+            }
           }
         } catch (error) {
           console.error('Error fetching user data:', error);
         }
       } else {
+        console.log('User logged out');
         setUser(null);
         setUsername(null);
         setPhoneNumber(null);
+        setBorough(null);
+        setIsAdmin(false);
       }
+      console.log('Setting loading to false');
       setLoading(false);
     });
 
@@ -38,25 +74,25 @@ export function AuthProvider({ children }) {
   }, []);
 
   // Sign up function
-  const signUp = async (email, password, username, phoneNumber) => {
+  const signUp = async (email, password, username, phoneNumber, borough) => {
     try {
       // Create user with email and password
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const uid = userCredential.user.uid;
 
-      // Store username and phone in Firestore
+      // Store username, phone, and borough in Firestore
       await setDoc(doc(db, 'users', uid), {
         username: username,
         email: email,
         phoneNumber: phoneNumber || '',
+        borough: borough || '',
         createdAt: new Date().toISOString(),
       });
 
-      setUser(userCredential.user);
-      setUsername(username);
-      setPhoneNumber(phoneNumber || null);
+      // Don't set user state here - let onAuthStateChanged handle it
       return { success: true };
     } catch (error) {
+      console.error('SignUp error:', error);
       return { 
         success: false, 
         error: error.message 
@@ -67,17 +103,12 @@ export function AuthProvider({ children }) {
   // Login function
   const login = async (email, password) => {
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      
-      // Fetch username from Firestore
-      const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
-      if (userDoc.exists()) {
-        setUsername(userDoc.data().username);
-      }
-
-      setUser(userCredential.user);
+      await signInWithEmailAndPassword(auth, email, password);
+      // Don't set user state here - let onAuthStateChanged handle it
+      // Just return success
       return { success: true };
     } catch (error) {
+      console.error('Login error:', error);
       return { 
         success: false, 
         error: error.message 
@@ -91,6 +122,7 @@ export function AuthProvider({ children }) {
       await signOut(auth);
       setUser(null);
       setUsername(null);
+      setIsAdmin(false);
       return { success: true };
     } catch (error) {
       return { 
@@ -106,7 +138,9 @@ export function AuthProvider({ children }) {
         user,
         username,
         phoneNumber,
+        borough,
         loading,
+        isAdmin,
         signUp,
         login,
         logout,
