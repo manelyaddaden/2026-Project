@@ -19,6 +19,7 @@ import {
   Platform,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
 import { realtimeDb } from './firebaseConfig';
 import { ref, set, onValue, get, update } from 'firebase/database';
 import { doc, getDoc } from 'firebase/firestore';
@@ -383,36 +384,58 @@ async function uploadImageToSupabase(imageUri) {
     const filename = `${timestamp}_${Math.random().toString(36).substr(2, 9)}.jpg`;
     
     console.log('🔄 Attempting to upload image to Supabase...');
-    
-    // Fetch the image as blob
-    const response = await fetch(imageUri);
-    const blob = await response.blob();
+    console.log('📱 Image URI:', imageUri);
+    console.log('🖥️ Platform:', Platform.OS);
+
+    let blob;
+
+    // Handle different URI formats for different platforms
+    if (imageUri.startsWith('file://') || imageUri.startsWith('/') || Platform.OS === 'android') {
+      // For Android/phone file:// URIs, use FileSystem to read as base64
+      console.log('📂 Reading file from local file system...');
+      try {
+        const base64 = await FileSystem.readAsStringAsync(imageUri, { encoding: 'base64' });
+        blob = await fetch(`data:image/jpeg;base64,${base64}`).then(res => res.blob());
+        console.log('✅ Converted file:// URI to blob');
+      } catch (fsError) {
+        console.error('❌ FileSystem error:', fsError);
+        // Fallback to fetch if FileSystem fails
+        const response = await fetch(imageUri);
+        blob = await response.blob();
+      }
+    } else {
+      // For web or other URIs, use fetch directly
+      console.log('🌐 Fetching image via HTTP...');
+      const response = await fetch(imageUri);
+      blob = await response.blob();
+    }
+
     console.log('📸 Image blob size:', blob.size, 'bytes');
-    
+
     // Upload to Supabase Storage
     const { data, error } = await supabase.storage
       .from('images')
       .upload(filename, blob, {
         contentType: 'image/jpeg',
       });
-    
+
     if (error) {
       console.error('❌ Supabase upload error:', error);
       console.error('Error details:', JSON.stringify(error, null, 2));
       throw new Error('Failed to upload image: ' + error.message);
     }
-    
+
     console.log('✅ File uploaded, getting public URL...');
-    
+
     // Get public URL
     const { data: publicUrlData } = supabase.storage
       .from('images')
       .getPublicUrl(filename);
-    
+
     if (!publicUrlData || !publicUrlData.publicUrl) {
       throw new Error('Failed to generate public URL');
     }
-    
+
     console.log('✅ Image uploaded to Supabase:', publicUrlData.publicUrl);
     return publicUrlData.publicUrl;
   } catch (error) {
@@ -1051,6 +1074,7 @@ function ProfilePage({ onNavigate, currentPage }) {
       : 0;
 
   const handleLogout = async () => {
+    console.log('123 logout')
     Alert.alert('Logout', 'Are you sure you want to logout?', [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -1748,23 +1772,32 @@ function HomePage({ onCreateObject, onCategorySelect, objects, onNavigate, curre
   const isDesktop = width >= 768;
 
   const handleLogout = async () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        { text: 'Cancel', onPress: () => {}, style: 'cancel' },
+    const isWeb = Platform.OS === 'web';
+    
+    if (isWeb) {
+      // Use native web confirm for desktop
+      if (window.confirm('Are you sure you want to logout?')) {
+        const result = await logout();
+        if (!result.success) {
+          window.alert('Error: ' + (result.error || 'Logout failed'));
+        }
+      }
+    } else {
+      // Use React Native Alert for mobile
+      Alert.alert('Logout', 'Are you sure you want to logout?', [
+        { text: 'Cancel', style: 'cancel' },
         {
           text: 'Logout',
+          style: 'destructive',
           onPress: async () => {
             const result = await logout();
             if (!result.success) {
-              Alert.alert('Error', 'Failed to logout: ' + result.error);
+              Alert.alert('Error', result.error || 'Logout failed');
             }
           },
-          style: 'destructive',
         },
-      ]
-    );
+      ]);
+    }
   };
 
   const categoryOptions = [
@@ -1811,23 +1844,26 @@ function HomePage({ onCreateObject, onCategorySelect, objects, onNavigate, curre
   return (
     <View style={styles.homeContainer}>
       <View style={styles.homeContent}>
-      <View style={styles.header}>
-        <View style={styles.headerContent}>
-          <Text style={styles.headerTitle}>Lendify</Text>
-          <Text style={styles.headerSubtitle}>Share with your community</Text>
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
+        <View style={styles.header}>
+          <View style={styles.headerContent}>
+            <Text style={styles.headerTitle}>Lendify</Text>
+            <Text style={styles.headerSubtitle}>Share with your community</Text>
+          </View>
+          <View style={styles.userSection}>
+            <Text style={styles.username}>👤 {username}</Text>
+            <TouchableOpacity
+              style={styles.logoutButton}
+              onPress={handleLogout}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.logoutButtonText}>Logout</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-        <View style={styles.userSection}>
-          <Text style={styles.username}>👤 {username}</Text>
-          <TouchableOpacity
-            style={styles.logoutButton}
-            onPress={handleLogout}
-          >
-            <Text style={styles.logoutButtonText}>Logout</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
 
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {/* Search Bar */}
         <View style={styles.searchContainer}>
           <Text style={styles.searchIcon}>🔍</Text>
@@ -1939,7 +1975,8 @@ function HomePage({ onCreateObject, onCategorySelect, objects, onNavigate, curre
         )}
 
         <View style={styles.bottomSpacing} />
-      </ScrollView>
+        </ScrollView>
+      </SafeAreaView>
       </View>
       <BottomNav currentPage={currentPage} onNavigate={onNavigate} />
     </View>
@@ -2348,6 +2385,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
+    pointerEvents: 'auto',
   },
   headerContent: {
     flex: 1,
@@ -2365,6 +2403,7 @@ const styles = StyleSheet.create({
   },
   userSection: {
     alignItems: 'flex-end',
+    pointerEvents: 'auto',
   },
   username: {
     fontSize: 14,
@@ -2379,6 +2418,8 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.4)',
+    cursor: 'pointer',
+    pointerEvents: 'auto',
   },
   logoutButtonText: {
     color: '#FFFFFF',
