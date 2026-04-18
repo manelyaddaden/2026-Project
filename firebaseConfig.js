@@ -1,4 +1,4 @@
-import { initializeApp } from 'firebase/app';
+import { initializeApp, getApps } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
@@ -14,8 +14,15 @@ const firebaseConfig = {
   databaseURL: "https://lendify-33a22-default-rtdb.firebaseio.com"
 };
 
-const app = initializeApp(firebaseConfig);
+// Prevent multiple Firebase app instances
+let app;
+if (!getApps().length) {
+  app = initializeApp(firebaseConfig);
+} else {
+  app = getApps()[0];
+}
 
+// Use getAuth() instead of initializeAuth() to avoid re-initialization issues
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);

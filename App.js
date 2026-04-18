@@ -379,53 +379,83 @@ function ObjectCreationPage1({ onNext, objectData, setObjectData, onNavigate, cu
 // Function to upload image to Supabase and get URL
 async function uploadImageToSupabase(imageUri) {
   try {
-    // Generate unique filename (no nested path in filename)
+    // Generate unique filename with .jpg extension
     const timestamp = Date.now();
     const filename = `${timestamp}_${Math.random().toString(36).substr(2, 9)}.jpg`;
     
-    console.log('🔄 Attempting to upload image to Supabase...');
-    console.log('📱 Image URI:', imageUri);
-    console.log('🖥️ Platform:', Platform.OS);
-
     let blob;
 
     // Handle different URI formats for different platforms
-    if (imageUri.startsWith('file://') || imageUri.startsWith('/') || Platform.OS === 'android') {
-      // For Android/phone file:// URIs, use FileSystem to read as base64
-      console.log('📂 Reading file from local file system...');
+    if (Platform.OS === 'android' || Platform.OS === 'ios') {
+      // For React Native (Android/iOS), read as base64 and upload directly
       try {
         const base64 = await FileSystem.readAsStringAsync(imageUri, { encoding: 'base64' });
-        blob = await fetch(`data:image/jpeg;base64,${base64}`).then(res => res.blob());
-        console.log('✅ Converted file:// URI to blob');
+        
+        if (!base64 || base64.length === 0) {
+          throw new Error('Base64 data is empty');
+        }
+        
+        // Convert base64 to binary using decode since Blob constructor doesn't work
+        const binaryString = atob(base64);
+        const len = binaryString.length;
+        const bytes = new Array(len);
+        for (let i = 0; i < len; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+        
+        // Create a proper upload using Supabase's upload binary method
+        blob = { data: bytes, type: 'image/jpeg' };
+        
       } catch (fsError) {
         console.error('❌ FileSystem error:', fsError);
-        // Fallback to fetch if FileSystem fails
-        const response = await fetch(imageUri);
-        blob = await response.blob();
+        throw new Error('Failed to read image file: ' + fsError.message);
       }
     } else {
-      // For web or other URIs, use fetch directly
-      console.log('🌐 Fetching image via HTTP...');
+      // For web, use fetch directly
       const response = await fetch(imageUri);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
       blob = await response.blob();
     }
 
-    console.log('📸 Image blob size:', blob.size, 'bytes');
+    // Validate blob/data
+    if (!blob) {
+      throw new Error('Failed to prepare blob data');
+    }
+
+    // For React Native, blob is {data: Array, type: string}
+    // For web, blob is a real Blob object
+    const blobSize = blob.size || blob.data?.length || 0;
+    if (blobSize === 0) {
+      throw new Error('Invalid blob: size is 0 or blob is empty');
+    }
 
     // Upload to Supabase Storage
+    
+    // For React Native, we need to convert the byte array to a Buffer-like object
+    let uploadData = blob;
+    if (Platform.OS !== 'web' && blob.data && Array.isArray(blob.data)) {
+      // Convert byte array to Uint8Array for Supabase
+      uploadData = new Uint8Array(blob.data);
+    }
+
     const { data, error } = await supabase.storage
       .from('images')
-      .upload(filename, blob, {
+      .upload(filename, uploadData, {
         contentType: 'image/jpeg',
+        upsert: false,
       });
 
     if (error) {
       console.error('❌ Supabase upload error:', error);
       console.error('Error details:', JSON.stringify(error, null, 2));
-      throw new Error('Failed to upload image: ' + error.message);
+      throw new Error('Supabase upload failed: ' + (error.message || JSON.stringify(error)));
     }
 
-    console.log('✅ File uploaded, getting public URL...');
+    if (!data || !data.path) {
+      throw new Error('No upload response from Supabase');
+    }
 
     // Get public URL
     const { data: publicUrlData } = supabase.storage
@@ -436,10 +466,10 @@ async function uploadImageToSupabase(imageUri) {
       throw new Error('Failed to generate public URL');
     }
 
-    console.log('✅ Image uploaded to Supabase:', publicUrlData.publicUrl);
     return publicUrlData.publicUrl;
   } catch (error) {
     console.error('❌ Image upload error:', error);
+    console.error('Error stack:', error.stack);
     throw error;
   }
 }
@@ -496,9 +526,7 @@ function ObjectCreationPage2({ onBack, onSubmit, objectData, setObjectData, onNa
   };
 
   const handleSubmit = () => {
-    console.log('ObjectCreationPage2 handleSubmit called');
-    console.log('objectData:', objectData);
-    console.log('imageUri:', imageUri);
+
     
     if (!objectData.description || !objectData.description.trim()) {
       Alert.alert('Required Field', 'Please enter a description');
@@ -509,8 +537,6 @@ function ObjectCreationPage2({ onBack, onSubmit, objectData, setObjectData, onNa
       Alert.alert('Required Field', 'Please upload an image');
       return;
     }
-    
-    console.log('Validation passed, calling onSubmit()');
     onSubmit();
   };
 
@@ -1074,7 +1100,6 @@ function ProfilePage({ onNavigate, currentPage }) {
       : 0;
 
   const handleLogout = async () => {
-    console.log('123 logout')
     Alert.alert('Logout', 'Are you sure you want to logout?', [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -1915,19 +1940,20 @@ function HomePage({ onCreateObject, onCategorySelect, objects, onNavigate, curre
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            style={styles.categoriesGrid}
             contentContainerStyle={styles.categoriesGridContent}
           >
-            {categoryOptions.map((category) => (
-              <TouchableOpacity
-                key={category.value}
-                style={styles.categoryCard}
-                onPress={() => onCategorySelect(category.value)}
-              >
-                <Text style={styles.categoryCardEmoji}>{category.emoji}</Text>
-                <Text style={styles.categoryCardName}>{category.label}</Text>
-              </TouchableOpacity>
-            ))}
+            <View style={styles.categoriesGrid}>
+              {categoryOptions.map((category) => (
+                <TouchableOpacity
+                  key={category.value}
+                  style={styles.categoryCard}
+                  onPress={() => onCategorySelect(category.value)}
+                >
+                  <Text style={styles.categoryCardEmoji}>{category.emoji}</Text>
+                  <Text style={styles.categoryCardName}>{category.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           </ScrollView>
         </View>
 
@@ -2078,7 +2104,7 @@ function MainApp() {
   };
 
   const handleDeleteItem = (itemId) => {
-    console.log('Delete clicked for item:', itemId);
+
     Alert.alert(
       'Delete Item',
       'Are you sure you want to delete this item? This action cannot be undone.',
@@ -2088,11 +2114,9 @@ function MainApp() {
           text: 'Delete',
           style: 'destructive',
           onPress: () => {
-            console.log('User confirmed delete for:', itemId);
             try {
               const itemRef = ref(realtimeDb, `objects/${itemId}`);
               set(itemRef, null).then(() => {
-                console.log('Item deleted from Firebase');
                 setObjects(objects.filter(obj => obj.id !== itemId));
                 Alert.alert('Success', 'Item deleted successfully');
               });
@@ -2163,13 +2187,11 @@ function MainApp() {
             timestamp: new Date().toISOString(),
           };
           
-          console.log('Saving object to Firebase with image URL:', newObject);
           
           // Save to Firebase Realtime Database
           const objectRef = ref(realtimeDb, 'objects/' + objectId);
           set(objectRef, newObject)
             .then(() => {
-              console.log('✅ Object saved successfully to Firebase');
               // Only update local state after successful Firebase save
               setObjects([...objects, newObject]);
               
@@ -2322,7 +2344,7 @@ function MainApp() {
 function AppContent() {
   const { user, loading, logout, isAdmin } = useContext(AuthContext);
 
-  console.log('AppContent - user:', user?.email || 'null', 'loading:', loading, 'isAdmin:', isAdmin);
+
 
   if (loading) {
     return (

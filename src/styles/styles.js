@@ -1,4 +1,4 @@
-import { StyleSheet } from 'react-native';
+import { StyleSheet, Platform } from 'react-native';
 import { colors } from './constants';
 
 export const styles = StyleSheet.create({
@@ -470,31 +470,185 @@ export const styles = StyleSheet.create({
     color: '#fff',
   },
 
-  // Home Page Specific Styles
-  searchContainer: {
+  // Home Page Specific Styles - Premium Search
+  premiumSearchContainer: {
+    marginHorizontal: 16,
+    marginTop: 20,
+    marginBottom: 20,
+  },
+  premiumSearchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
-    marginHorizontal: 16,
-    marginTop: 16,
-    marginBottom: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-    borderRadius: 10,
-    borderWidth: 1.5,
+    backgroundColor: colors.lightBg,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 50,
+    borderWidth: 2,
     borderColor: colors.border,
+    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
   },
-  searchIcon: {
-    fontSize: 18,
-    marginRight: 10,
+  premiumSearchIcon: {
+    fontSize: 20,
+    marginRight: 12,
   },
-  searchInput: {
+  premiumSearchInput: {
     flex: 1,
     fontSize: 16,
     color: colors.text,
+    fontWeight: '500',
   },
 
-  // Borough Filter Styles
+  // Filters Card Container
+  filtersCardContainer: {
+    marginHorizontal: 16,
+    marginBottom: 24,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 20,
+    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+  },
+
+  // Filter Section Styles
+  filterSection: {
+    marginBottom: 24,
+  },
+  filterSectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  filterSectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  filterSelectedBadge: {
+    backgroundColor: colors.primary,
+    color: '#FFFFFF',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    fontSize: 11,
+    fontWeight: '600',
+    overflow: 'hidden',
+  },
+
+  // Filter Chips
+  filterChipsContainer: {
+    gap: 8,
+    paddingRight: 8,
+  },
+  filterChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 24,
+    backgroundColor: colors.lightBg,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+  },
+  filterChipActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  filterChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  filterChipTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+
+  // Category Grid
+  categoryGridContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  categoryGridCard: {
+    flex: 0.31,
+    alignItems: 'center',
+    paddingVertical: 14,
+    backgroundColor: colors.lightBg,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+  },
+  categoryGridCardActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  categoryGridEmoji: {
+    fontSize: 28,
+    marginBottom: 6,
+  },
+  categoryGridLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.text,
+    textAlign: 'center',
+  },
+  categoryGridLabelActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+
+  // Filter Action Buttons
+  filterActionsContainer: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 20,
+  },
+  clearFiltersButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: colors.lightBg,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    alignItems: 'center',
+  },
+  clearFiltersButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  applyFiltersButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    alignItems: 'center',
+    boxShadow: `0 4px 8px rgba(46, 80, 144, 0.3)`,
+  },
+  applyFiltersButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+
+  // Results Summary
+  resultsSummary: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: colors.lightBg,
+    borderRadius: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.primary,
+  },
+  resultsSummaryText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.text,
+  },
+
+  // Borough Filter Styles (Legacy)
   boroughFilterContainer: {
     marginHorizontal: 16,
     marginBottom: 16,
@@ -512,9 +666,9 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: colors.lightBg,
+    backgroundColor: '#FFFFFF',
     borderWidth: 1.5,
-    borderColor: colors.border,
+    borderColor: '#CCCCCC',
     marginRight: 8,
   },
   boroughFilterButtonActive: {
@@ -542,6 +696,100 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 6,
   },
 
+  // Generic Filter Styles
+  filterContainer: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+  },
+  filterLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: 10,
+  },
+
+  // Category Filter Styles
+  categoryFilterWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  categoryFilterScrollContent: {
+    paddingRight: 16,
+  },
+  categoryFilterButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: colors.lightBg,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    marginRight: 8,
+  },
+  categoryFilterButtonActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  categoryFilterButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  categoryFilterButtonTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+
+  // Price Filter Styles
+  priceFilterWrapper: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 12,
+  },
+  priceInputGroup: {
+    flex: 1,
+  },
+  priceFilterLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 6,
+  },
+  priceFilterInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.lightBg,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    paddingHorizontal: 8,
+  },
+  priceFilterSymbol: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.primary,
+    marginRight: 4,
+  },
+  priceFilterInput: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    fontSize: 12,
+    color: colors.text,
+  },
+  clearPriceButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: colors.warning,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  clearPriceButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+
   section: {
     marginBottom: 24,
   },
@@ -555,29 +803,29 @@ export const styles = StyleSheet.create({
 
   // Category Styles
   categoriesGrid: {
-    flexDirection: 'row',
-    paddingHorizontal: 8,
-    paddingVertical: 8,
+    flexDirection: 'column',
+    flexWrap: 'wrap',
+    height: 240,
+    paddingHorizontal: 0,
+    paddingVertical: 0,
   },
   categoriesGridContent: {
-    paddingRight: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
   },
   categoryCard: {
-    width: 182,
-    height: 70,
-    backgroundColor: colors.background,
-    marginRight: 8,
-    padding: 6,
-    borderRadius: 10,
+    width: '48%',
+    height: 110,
+    backgroundColor: '#FFFFFF',
+    marginBottom: 12,
+    marginRight: 12,
+    padding: 12,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
-    borderColor: colors.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 2,
-    elevation: 2,
+    borderColor: '#E8E8E8',
+    flexBasis: '48%',
   },
   categoryCardEmoji: {
     fontSize: 22,
@@ -688,7 +936,7 @@ export const styles = StyleSheet.create({
   homeContainerMobile: {
     flex: 1,
     backgroundColor: colors.background,
-    paddingBottom: 72,
+    paddingBottom: Platform.OS === 'android' ? 102 : 72,
   },
   homeContainer: {
     flex: 1,
@@ -712,7 +960,7 @@ export const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.border,
     paddingTop: 10,
-    paddingBottom: 16,
+    paddingBottom: Platform.OS === 'android' ? 30 : 16,
     paddingHorizontal: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -2 },
@@ -808,10 +1056,11 @@ export const styles = StyleSheet.create({
   categoryGridContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
+    gap: 8,
+    justifyContent: 'flex-start',
   },
   categoryGridItem: {
-    width: '20%',
+    width: '18%',
     aspectRatio: 1,
     borderRadius: 10,
     backgroundColor: colors.lightBg,
@@ -1473,6 +1722,32 @@ export const styles = StyleSheet.create({
     lineHeight: 20,
     fontWeight: '500',
   },
+  // Search Container (Original Layout)
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 16,
+    marginTop: 16,
+    marginBottom: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: colors.lightBg,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+  },
+  searchIcon: {
+    fontSize: 18,
+    marginRight: 10,
+    color: colors.lightText,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: colors.text,
+    fontWeight: '500',
+  },
+
   safetyCtaContainer: {
     marginHorizontal: 16,
     marginBottom: 40,

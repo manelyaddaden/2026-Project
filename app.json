@@ -16,14 +16,27 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.neighborlend.app"
+      "bundleIdentifier": "com.neighborlend.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "We need access to your camera to capture photos of items you want to share.",
+        "NSPhotoLibraryUsageDescription": "We need access to your photo library to select images for your items.",
+        "NSPhotoLibraryAddUsageDescription": "We need permission to save photos to your library.",
+        "NSMicrophoneUsageDescription": "We need access to your microphone for video recording (optional)."
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#4A90E2"
       },
-      "package": "com.neighborlend.app"
+      "package": "com.neighborlend.app",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"

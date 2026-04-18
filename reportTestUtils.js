@@ -36,7 +36,7 @@ export const createTestReport = async (
       timestamp: serverTimestamp(),
       status: 'pending',
     });
-    console.log('Test report created:', docRef.id);
+
     return docRef.id;
   } catch (error) {
     console.error('Error creating test report:', error);
@@ -50,11 +50,8 @@ export const createTestReport = async (
 export const logReports = async () => {
   try {
     const reportsSnapshot = await getDocs(collection(db, 'reports'));
-    console.log('=== REPORTS ===');
     reportsSnapshot.forEach((doc) => {
-      console.log('ID:', doc.id);
-      console.log('Data:', doc.data());
-      console.log('---');
+      // Report data available but logging disabled
     });
   } catch (error) {
     console.error('Error logging reports:', error);

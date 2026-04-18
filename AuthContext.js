@@ -16,13 +16,10 @@ export function AuthProvider({ children }) {
   // Listen for auth state changes
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (authUser) => {
-      console.log('Auth state changed:', authUser?.email || 'No user');
       if (authUser) {
-        console.log('User logged in:', authUser.email);
         setUser(authUser);
         // Check if admin
         if (authUser.email === 'adminpanel@gmail.com') {
-          console.log('Setting admin user');
           setIsAdmin(true);
         } else {
           setIsAdmin(false);
@@ -31,15 +28,12 @@ export function AuthProvider({ children }) {
         try {
           const userDoc = await getDoc(doc(db, 'users', authUser.uid));
           if (userDoc.exists()) {
-            console.log('User data found in Firestore');
             setUsername(userDoc.data().username);
             setPhoneNumber(userDoc.data().phoneNumber || null);
             setBorough(userDoc.data().borough || null);
           } else {
-            console.log('User data not found in Firestore');
             // For admin, create a basic record if it doesn't exist
             if (authUser.email === 'adminpanel@gmail.com') {
-              console.log('Creating admin user record in Firestore');
               try {
                 await setDoc(doc(db, 'users', authUser.uid), {
                   username: 'Admin',
@@ -59,14 +53,12 @@ export function AuthProvider({ children }) {
           console.error('Error fetching user data:', error);
         }
       } else {
-        console.log('User logged out');
         setUser(null);
         setUsername(null);
         setPhoneNumber(null);
         setBorough(null);
         setIsAdmin(false);
       }
-      console.log('Setting loading to false');
       setLoading(false);
     });
 

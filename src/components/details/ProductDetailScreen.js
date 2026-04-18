@@ -330,7 +330,7 @@ export function ProductDetailScreen({ product, onBack, username, onSellerSelect 
               >
                 <Text style={styles.detailRateSellerIcon}>⭐</Text>
                 <Text style={styles.detailRateSellerText}>
-                  {iAmSeller ? 'Your own item' : myReview ? 'You reviewed this seller' : 'Rate this seller'}
+                  {iAmSeller ? 'Your own item' : myReview ? 'You reviewed this borrower' : 'Rate this borrower'}
                 </Text>
               </TouchableOpacity>
 

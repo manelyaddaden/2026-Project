@@ -75,7 +75,7 @@ By using this app, you agree to release Lendify from any and all claims, liabili
 If you do not agree with these terms, please do not use the app.`;
 
 export function AuthScreen() {
-  const [isLogin, setIsLogin] = useState(false);
+  const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
@@ -392,7 +392,7 @@ export function AuthScreen() {
                   <Text style={styles.infoText}>
                     {isLogin
                       ? 'Your account is secure and protected'
-                      : 'Join thousands borrowing and sharing items'}
+                      : 'Our Goal : Join thousands borrowing and sharing items'}
                   </Text>
                 </View>
 

@@ -21,6 +21,7 @@ export const categoryOptions = [
   { emoji: '📚', label: 'Books', value: 'books' },
   { emoji: '🎮', label: 'Games', value: 'games' },
   { emoji: '👕', label: 'Clothing', value: 'clothing' },
+  { emoji: '❓', label: 'Other', value: 'other' },
 ];
 
 export const conditionOptions = [

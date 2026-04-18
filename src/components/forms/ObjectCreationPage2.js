@@ -69,10 +69,6 @@ export function ObjectCreationPage2({ onBack, onSubmit, objectData, setObjectDat
   };
 
   const handleSubmit = () => {
-    console.log('ObjectCreationPage2 handleSubmit called');
-    console.log('objectData:', objectData);
-    console.log('imageUri:', imageUri);
-    
     if (!objectData.description || !objectData.description.trim()) {
       Alert.alert('Required Field', 'Please enter a description');
       return;
@@ -82,8 +78,6 @@ export function ObjectCreationPage2({ onBack, onSubmit, objectData, setObjectDat
       Alert.alert('Required Field', 'Please upload an image');
       return;
     }
-    
-    console.log('Validation passed, calling onSubmit()');
     onSubmit();
   };
 

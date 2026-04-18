@@ -9,20 +9,23 @@ export async function uploadImageToSupabase(imageUri) {
     const timestamp = Date.now();
     const filename = `${timestamp}_${Math.random().toString(36).substr(2, 9)}.jpg`;
     
-    console.log('🔄 Attempting to upload image to Supabase...');
-    console.log('📱 Image URI:', imageUri);
-    console.log('🖥️ Platform:', Platform.OS);
-
     let blob;
 
     // Handle different URI formats for different platforms
     if (imageUri.startsWith('file://') || imageUri.startsWith('/') || Platform.OS === 'android') {
       // For Android/phone file:// URIs, use FileSystem to read as base64
-      console.log('📂 Reading file from local file system...');
       try {
         const base64 = await FileSystem.readAsStringAsync(imageUri, { encoding: 'base64' });
-        blob = await fetch(`data:image/jpeg;base64,${base64}`).then(res => res.blob());
-        console.log('✅ Converted file:// URI to blob');
+        
+        // Convert base64 to byte array (don't use Blob in React Native)
+        const binaryString = atob(base64);
+        const len = binaryString.length;
+        const bytes = new Array(len);
+        for (let i = 0; i < len; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+        
+        blob = { data: bytes, type: 'image/jpeg' };
       } catch (fsError) {
         console.error('❌ FileSystem error:', fsError);
         // Fallback to fetch if FileSystem fails
@@ -31,17 +34,23 @@ export async function uploadImageToSupabase(imageUri) {
       }
     } else {
       // For web or other URIs, use fetch directly
-      console.log('🌐 Fetching image via HTTP...');
       const response = await fetch(imageUri);
       blob = await response.blob();
     }
 
-    console.log('📸 Image blob size:', blob.size, 'bytes');
+
+
+    // Handle blob for Supabase - React Native needs conversion
+    let uploadData = blob;
+    if (Platform.OS !== 'web' && blob.data && Array.isArray(blob.data)) {
+      // Convert byte array to Uint8Array for Supabase
+      uploadData = new Uint8Array(blob.data);
+    }
 
     // Upload to Supabase Storage
     const { data, error } = await supabase.storage
       .from('images')
-      .upload(filename, blob, {
+      .upload(filename, uploadData, {
         contentType: 'image/jpeg',
       });
 
@@ -50,8 +59,6 @@ export async function uploadImageToSupabase(imageUri) {
       console.error('Error details:', JSON.stringify(error, null, 2));
       throw new Error('Failed to upload image: ' + error.message);
     }
-
-    console.log('✅ File uploaded, getting public URL...');
 
     // Get public URL
     const { data: publicUrlData } = supabase.storage
@@ -62,10 +69,21 @@ export async function uploadImageToSupabase(imageUri) {
       throw new Error('Failed to generate public URL');
     }
 
-    console.log('✅ Image uploaded to Supabase:', publicUrlData.publicUrl);
     return publicUrlData.publicUrl;
   } catch (error) {
     console.error('❌ Image upload error:', error);
     throw error;
   }
+}
+
+// Helper function to handle image display with error fallback
+export function createImageSource(imageUrl) {
+  if (!imageUrl) {
+    return null;
+  }
+  
+  // Ensure URL is properly formatted
+  const url = typeof imageUrl === 'string' ? imageUrl.trim() : imageUrl;
+  
+  return { uri: url };
 }
