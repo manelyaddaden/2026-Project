@@ -15,54 +15,88 @@ export function AuthProvider({ children }) {
 
   // Listen for auth state changes
   useEffect(() => {
+    let isMounted = true;
+    let timeoutId;
+
+    // Set a 10 second timeout to allow app to load even if Firebase is slow
+    timeoutId = setTimeout(() => {
+      if (isMounted && loading) {
+        console.warn('Firebase auth check timed out - proceeding with app load');
+        setLoading(false);
+      }
+    }, 10000);
+
     const unsubscribe = onAuthStateChanged(auth, async (authUser) => {
-      if (authUser) {
-        setUser(authUser);
-        // Check if admin
-        if (authUser.email === 'adminpanel@gmail.com') {
-          setIsAdmin(true);
-        } else {
-          setIsAdmin(false);
-        }
-        // Fetch username, phone, and borough from Firestore
-        try {
-          const userDoc = await getDoc(doc(db, 'users', authUser.uid));
-          if (userDoc.exists()) {
-            setUsername(userDoc.data().username);
-            setPhoneNumber(userDoc.data().phoneNumber || null);
-            setBorough(userDoc.data().borough || null);
+      if (!isMounted) return;
+
+      try {
+        if (authUser) {
+          setUser(authUser);
+          // Check if admin
+          if (authUser.email === 'adminpanel@gmail.com') {
+            setIsAdmin(true);
           } else {
-            // For admin, create a basic record if it doesn't exist
-            if (authUser.email === 'adminpanel@gmail.com') {
-              try {
-                await setDoc(doc(db, 'users', authUser.uid), {
-                  username: 'Admin',
-                  email: authUser.email,
-                  phoneNumber: '',
-                  borough: '',
-                  createdAt: new Date().toISOString(),
-                  isAdmin: true,
-                });
-                setUsername('Admin');
-              } catch (createError) {
-                console.error('Error creating admin user record:', createError);
+            setIsAdmin(false);
+          }
+          // Fetch username, phone, and borough from Firestore with timeout
+          try {
+            const userDoc = await Promise.race([
+              getDoc(doc(db, 'users', authUser.uid)),
+              new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('Firestore getDoc timeout')), 8000)
+              ),
+            ]);
+            if (userDoc.exists()) {
+              if (isMounted) {
+                setUsername(userDoc.data().username);
+                setPhoneNumber(userDoc.data().phoneNumber || null);
+                setBorough(userDoc.data().borough || null);
+              }
+            } else {
+              // For admin, create a basic record if it doesn't exist
+              if (authUser.email === 'adminpanel@gmail.com') {
+                try {
+                  await setDoc(doc(db, 'users', authUser.uid), {
+                    username: 'Admin',
+                    email: authUser.email,
+                    phoneNumber: '',
+                    borough: '',
+                    createdAt: new Date().toISOString(),
+                    isAdmin: true,
+                  });
+                  if (isMounted) {
+                    setUsername('Admin');
+                  }
+                } catch (createError) {
+                  console.error('Error creating admin user record:', createError);
+                }
               }
             }
+          } catch (firestoreError) {
+            console.warn('Firestore fetch error (app will still load):', firestoreError.message);
           }
-        } catch (error) {
-          console.error('Error fetching user data:', error);
+        } else {
+          if (isMounted) {
+            setUser(null);
+            setUsername(null);
+            setPhoneNumber(null);
+            setBorough(null);
+            setIsAdmin(false);
+          }
         }
-      } else {
-        setUser(null);
-        setUsername(null);
-        setPhoneNumber(null);
-        setBorough(null);
-        setIsAdmin(false);
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+          clearTimeout(timeoutId);
+        }
       }
-      setLoading(false);
     });
 
-    return unsubscribe;
+    return () => {
+      isMounted = false;
+      clearTimeout(timeoutId);
+      unsubscribe();
+    };
   }, []);
 
   // Sign up function
